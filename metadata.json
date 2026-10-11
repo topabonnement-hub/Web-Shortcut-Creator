@@ -1,0 +1,6 @@
+{
+  "name": "Web Shortcut Creator",
+  "description": "Créez et configurez facilement des raccourcis d'écran d'accueil Android optimisés pour vos sites web préférés avec aperçu en direct, extraction de favicon et guides d'installation pas-à-pas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
