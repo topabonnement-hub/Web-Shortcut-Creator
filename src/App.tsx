@@ -356,24 +356,24 @@ export default function App() {
                     className="px-7 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all min-h-[48px]"
                   >
                     <PlusSquare className="w-4 h-4 text-emerald-100" />
-                    <span>Créer et Installer l'Icône sur mon Mobile</span>
+                    <span>Installer comme Application sur Mobile</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ================= STEP 3: Installation de l'icône sur mobile ================= */}
+            {/* ================= STEP 3: Installation de l'application sur mobile ================= */}
             {currentStep === 3 && analysis && (
               <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Étape 3 sur 3 : Icône Prête
+                      Étape 3 sur 3 : Application Prête
                     </span>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                      Installation de l'icône sur votre écran d'accueil
+                      Installation de l'application sur votre smartphone
                     </h2>
                   </div>
 

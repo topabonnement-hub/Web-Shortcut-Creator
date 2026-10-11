@@ -254,12 +254,22 @@ async function startServer() {
     res.json(manifest);
   });
 
-  // Standalone Launcher endpoint: simulates opening or installing the shortcut directly
+  // Service Worker for 100% PWA installability in Chrome and Android browsers
+  app.get('/sw.js', (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(`
+      self.addEventListener('install', (e) => self.skipWaiting());
+      self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+      self.addEventListener('fetch', (e) => {});
+    `);
+  });
+
+  // Standalone Launcher endpoint: simulates opening or installing the shortcut directly like an app
   app.get('/launch', (req: Request, res: Response) => {
     const targetUrl = (req.query.url as string) || 'https://google.com';
     const name = (req.query.name as string) || 'Web Shortcut';
     const icon = (req.query.icon as string) || '';
-    const themeColor = (req.query.theme as string) || '#0f172a';
+    const themeColor = (req.query.theme as string) || '#10b981';
 
     const safeUrl = encodeURI(targetUrl);
     const safeName = String(name).replace(/"/g, '&quot;');
@@ -278,6 +288,11 @@ async function startServer() {
   <link rel="icon" href="${safeIcon || '/favicon.ico'}">
   <link rel="apple-touch-icon" href="${safeIcon || '/favicon.ico'}">
   <link rel="manifest" href="/api/manifest?name=${encodeURIComponent(name)}&url=${encodeURIComponent(targetUrl)}&icon=${encodeURIComponent(icon)}&theme_color=${encodeURIComponent(themeColor)}">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(err){ console.log(err); });
+    }
+  </script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -289,30 +304,43 @@ async function startServer() {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 24px;
+      padding: 20px;
       text-align: center;
     }
     .card {
       background: #ffffff;
       border: 1px solid #e2e8f0;
-      border-radius: 24px;
+      border-radius: 28px;
       padding: 32px 24px;
       max-width: 420px;
       width: 100%;
       box-shadow: 0 10px 25px -5px rgba(0,0,0,0.06);
     }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
     .icon-wrap {
-      width: 88px;
-      height: 88px;
-      margin: 0 auto 20px;
-      border-radius: 22px;
+      width: 96px;
+      height: 96px;
+      margin: 0 auto 16px;
+      border-radius: 24px;
       background: #f1f5f9;
       display: flex;
       align-items: center;
       justify-content: center;
       overflow: hidden;
       border: 2px solid #e2e8f0;
-      box-shadow: 0 4px 10px -2px rgba(0,0,0,0.06);
+      box-shadow: 0 8px 16px -4px rgba(0,0,0,0.1);
     }
     .icon-wrap img {
       width: 100%;
@@ -320,60 +348,119 @@ async function startServer() {
       object-fit: cover;
     }
     h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 8px;
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 6px;
       color: #0f172a;
     }
-    p {
-      font-size: 13px;
+    p.url {
+      font-size: 12px;
       color: #64748b;
       margin-bottom: 24px;
       word-break: break-all;
     }
-    .btn {
+    .btn-install {
       display: block;
       width: 100%;
       background: #059669;
       color: #ffffff;
-      font-weight: 600;
-      font-size: 15px;
-      padding: 14px 20px;
-      border-radius: 14px;
+      font-weight: 700;
+      font-size: 16px;
+      padding: 16px 20px;
+      border-radius: 16px;
       text-decoration: none;
-      transition: background 0.15s ease;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 10px 15px -3px rgba(5, 150, 105, 0.3);
+      transition: all 0.15s ease;
       margin-bottom: 12px;
     }
-    .btn:hover { background: #10b981; }
-    .btn-secondary {
+    .btn-install:active { transform: scale(0.98); }
+    .btn-open {
+      display: block;
+      width: 100%;
       background: #f1f5f9;
       color: #334155;
+      font-weight: 600;
       font-size: 13px;
       padding: 12px 18px;
+      border-radius: 14px;
+      text-decoration: none;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 16px;
+    }
+    .hint {
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.6;
+      background: #f8fafc;
+      padding: 12px;
       border-radius: 12px;
       border: 1px solid #e2e8f0;
     }
-    .hint {
-      margin-top: 16px;
-      font-size: 11px;
-      color: #64748b;
-      line-height: 1.5;
+    #statusNotice {
+      display: none;
+      padding: 12px;
+      margin-bottom: 14px;
+      background: #d1fae5;
+      color: #065f46;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 12px;
     }
   </style>
 </head>
 <body>
   <div class="card">
+    <span class="badge">Application Mobile Android</span>
     <div class="icon-wrap">
-      ${safeIcon ? `<img src="${safeIcon}" alt="${safeName}" onerror="this.style.display='none'">` : '🌐'}
+      ${safeIcon ? `<img src="${safeIcon}" alt="${safeName}" onerror="this.style.display='none'">` : '📱'}
     </div>
     <h1>${safeName}</h1>
-    <p>${safeUrl}</p>
-    <a href="${safeUrl}" class="btn">🚀 Ouvrir le site web</a>
-    <a href="/" class="btn btn-secondary">Créer un autre raccourci</a>
+    <p class="url">${safeUrl}</p>
+    
+    <div id="statusNotice"></div>
+
+    <button id="installBtn" class="btn-install" onclick="triggerInstall()">
+      📲 Installer l'application sur mon smartphone
+    </button>
+
+    <a href="${safeUrl}" class="btn-open">
+      🚀 Ouvrir le site directement
+    </a>
+
     <div class="hint">
-      <strong>Astuce Android :</strong> Ouvrez le menu de votre navigateur (les 3 points verticaux ⋮) puis choisissez <em>« Ajouter à l'écran d'accueil »</em>.
+      <strong>Installation Android :</strong> Si la fenêtre ne s'ouvre pas automatiquement, appuyez sur le menu (<strong>⋮</strong> ou <strong>☰</strong>) de votre navigateur puis sur <em>« Installer l'application »</em>.
     </div>
   </div>
+
+  <script>
+    var deferredPrompt;
+    window.addEventListener('beforeinstallprompt', function(e) {
+      e.preventDefault();
+      deferredPrompt = e;
+      var btn = document.getElementById('installBtn');
+      if (btn) {
+        btn.innerHTML = '📲 Installer l\\'application maintenant';
+      }
+    });
+
+    function triggerInstall() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        deferredPrompt.userChoice.then(function(choice) {
+          if (choice.outcome === 'accepted') {
+            var notice = document.getElementById('statusNotice');
+            notice.innerText = '✓ Application installée sur votre écran d\\'accueil !';
+            notice.style.display = 'block';
+          }
+          deferredPrompt = null;
+        });
+      } else {
+        alert('Pour installer l\\'application : touchez les 3 points (⋮) en haut de votre navigateur, puis "Installer l\\'application" ou "Ajouter à l\\'écran d\\'accueil".');
+      }
+    }
+  </script>
 </body>
 </html>`;
 
