@@ -121,18 +121,18 @@ export const Customizer: React.FC<CustomizerProps> = ({
 
       {/* Field: Icon Selection with Tabs */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-2">
           <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
             <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
             Source de l'icône
           </label>
 
           {/* Segmented controls */}
-          <div className="flex items-center p-1 bg-slate-100 rounded-lg border border-slate-200">
+          <div className="flex items-center p-1 bg-slate-100 rounded-lg border border-slate-200 overflow-x-auto scrollbar-none max-w-full">
             <button
               type="button"
               onClick={() => setActiveTab('extracted')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap min-h-[32px] ${
                 activeTab === 'extracted'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
@@ -143,18 +143,18 @@ export const Customizer: React.FC<CustomizerProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('monogram')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap min-h-[32px] ${
                 activeTab === 'monogram'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Créer Monogramme
+              Monogramme
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('upload')}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`px-2.5 py-1.5 text-xs font-semibold rounded-md transition-colors whitespace-nowrap min-h-[32px] ${
                 activeTab === 'upload'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'

@@ -13,28 +13,28 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: 1,
     label: 'Analyse du Site',
-    shortLabel: '1. Analyse',
+    shortLabel: 'Analyse',
     description: 'Saisie & extraction de l\'URL',
     icon: Globe,
   },
   {
     id: 2,
     label: 'Personnalisation',
-    shortLabel: '2. Style',
+    shortLabel: 'Style',
     description: 'Nom, icône & forme Android',
     icon: Palette,
   },
   {
     id: 3,
     label: 'Méthode',
-    shortLabel: '3. Méthode',
+    shortLabel: 'Méthode',
     description: 'Choix parmi les 4 options',
     icon: Sliders,
   },
   {
     id: 4,
     label: 'Installation',
-    shortLabel: '4. Installation',
+    shortLabel: 'Installation',
     description: 'QR Code & guides pas-à-pas',
     icon: Smartphone,
   },
@@ -52,14 +52,13 @@ export const WizardStepper: React.FC<WizardStepperProps> = ({
   maxReachedStep,
 }) => {
   return (
-    <div className="w-full bg-white border border-slate-200/90 rounded-2xl p-3 sm:p-4 shadow-sm mb-6">
+    <div className="w-full bg-white border border-slate-200/90 rounded-2xl p-2 sm:p-3 md:p-4 shadow-sm mb-4 sm:mb-6">
       {/* Step items row */}
       <div className="grid grid-cols-4 gap-1 sm:gap-2">
         {WIZARD_STEPS.map((step) => {
           const isCurrent = currentStep === step.id;
           const isCompleted = currentStep > step.id;
           const isClickable = step.id <= maxReachedStep;
-          const Icon = step.icon;
 
           return (
             <button
@@ -67,17 +66,17 @@ export const WizardStepper: React.FC<WizardStepperProps> = ({
               type="button"
               disabled={!isClickable}
               onClick={() => isClickable && onSelectStep(step.id)}
-              className={`flex flex-col items-center sm:items-start p-2 sm:p-3 rounded-xl transition-all text-left relative ${
+              className={`flex flex-col items-center sm:items-start p-1.5 xs:p-2 sm:p-3 rounded-xl transition-all text-left relative min-h-[48px] sm:min-h-[64px] justify-center sm:justify-start ${
                 isCurrent
-                  ? 'bg-emerald-50 border border-emerald-300 text-slate-900 shadow-xs'
+                  ? 'bg-emerald-50 border border-emerald-300 text-slate-900 shadow-2xs'
                   : isCompleted
                   ? 'hover:bg-slate-50 text-slate-700 cursor-pointer'
-                  : 'opacity-50 cursor-not-allowed text-slate-400'
+                  : 'opacity-40 cursor-not-allowed text-slate-400'
               }`}
             >
-              <div className="flex items-center gap-2 mb-1">
+              <div className="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
                 <div
-                  className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-colors ${
+                  className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-[11px] sm:text-xs font-bold transition-colors shrink-0 ${
                     isCurrent
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : isCompleted
@@ -93,7 +92,7 @@ export const WizardStepper: React.FC<WizardStepperProps> = ({
                 </div>
 
                 <span
-                  className={`text-xs font-bold hidden sm:inline ${
+                  className={`text-xs font-bold hidden sm:inline truncate ${
                     isCurrent ? 'text-emerald-900' : isCompleted ? 'text-slate-800' : 'text-slate-500'
                   }`}
                 >
@@ -103,21 +102,21 @@ export const WizardStepper: React.FC<WizardStepperProps> = ({
 
               {/* Mobile label */}
               <span
-                className={`text-[10px] font-semibold sm:hidden truncate max-w-full ${
-                  isCurrent ? 'text-emerald-900' : 'text-slate-600'
+                className={`text-[10px] font-semibold sm:hidden truncate max-w-full text-center ${
+                  isCurrent ? 'text-emerald-900 font-bold' : 'text-slate-600'
                 }`}
               >
                 {step.shortLabel}
               </span>
 
-              {/* Desktop subtitle */}
+              {/* Desktop/Tablet subtitle */}
               <p className="text-[11px] text-slate-500 hidden md:block line-clamp-1">
                 {step.description}
               </p>
 
               {/* Current active indicator line */}
               {isCurrent && (
-                <div className="absolute bottom-0 left-3 right-3 h-0.5 bg-emerald-600 rounded-full" />
+                <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-emerald-600 rounded-full" />
               )}
             </button>
           );

@@ -44,16 +44,16 @@ export const AndroidPhoneMockup: React.FC<AndroidPhoneMockupProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center">
+    <div className="flex flex-col items-center w-full">
       {/* Phone Case / Bezel (Dark Titanium Chassis) */}
-      <div className="relative w-[280px] sm:w-[310px] h-[580px] sm:h-[620px] bg-slate-900 rounded-[44px] p-3 border-4 border-slate-700 shadow-2xl shadow-slate-300/40 ring-1 ring-slate-800 flex flex-col justify-between overflow-hidden">
+      <div className="relative w-[260px] xs:w-[280px] sm:w-[300px] md:w-[310px] h-[500px] xs:h-[540px] sm:h-[580px] md:h-[610px] bg-slate-900 rounded-[38px] sm:rounded-[44px] p-2.5 sm:p-3 border-4 border-slate-700 shadow-xl shadow-slate-300/40 ring-1 ring-slate-800 flex flex-col justify-between overflow-hidden mx-auto transition-all">
         {/* Antenna / volume button notches simulation on border */}
-        <div className="absolute -left-[5px] top-24 w-[3px] h-12 bg-slate-600 rounded-l-md" />
-        <div className="absolute -left-[5px] top-40 w-[3px] h-12 bg-slate-600 rounded-l-md" />
-        <div className="absolute -right-[5px] top-32 w-[3px] h-16 bg-slate-600 rounded-r-md" />
+        <div className="absolute -left-[5px] top-20 sm:top-24 w-[3px] h-10 sm:h-12 bg-slate-600 rounded-l-md" />
+        <div className="absolute -left-[5px] top-34 sm:top-40 w-[3px] h-10 sm:h-12 bg-slate-600 rounded-l-md" />
+        <div className="absolute -right-[5px] top-28 sm:top-32 w-[3px] h-14 sm:h-16 bg-slate-600 rounded-r-md" />
 
         {/* Screen Display - Crisp Android Light Wallpaper */}
-        <div className="relative w-full h-full bg-gradient-to-b from-sky-50 via-emerald-50/40 to-teal-100/60 rounded-[34px] overflow-hidden flex flex-col justify-between p-3.5 select-none shadow-inner">
+        <div className="relative w-full h-full bg-gradient-to-b from-sky-50 via-emerald-50/40 to-teal-100/60 rounded-[30px] sm:rounded-[34px] overflow-hidden flex flex-col justify-between p-3 sm:p-3.5 select-none shadow-inner">
           {/* Subtle wallpaper gradient mesh */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/80 via-transparent to-teal-500/10 pointer-events-none" />
 

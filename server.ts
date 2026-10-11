@@ -1,6 +1,8 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -380,11 +382,22 @@ async function startServer() {
   });
 
   // Setup Vite in development or static serve in production
-  if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.join(__dirname, 'dist')));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-    });
+  const isProduction = process.env.NODE_ENV === 'production';
+  const distFromRoot = path.join(__dirname, 'dist');
+  const distDirect = __dirname;
+  const clientDistDir = fs.existsSync(path.join(distFromRoot, 'index.html'))
+    ? distFromRoot
+    : fs.existsSync(path.join(distDirect, 'index.html'))
+    ? distDirect
+    : null;
+
+  if (isProduction || clientDistDir) {
+    if (clientDistDir) {
+      app.use(express.static(clientDistDir));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(clientDistDir, 'index.html'));
+      });
+    }
   } else {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
