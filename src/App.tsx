@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { WebsiteAnalysis, CustomShortcutConfig, GenerationMethodId, IconSource } from './types';
+import { WebsiteAnalysis, CustomShortcutConfig, IconSource } from './types';
 import { normalizeUrl, generateClientFallbackAnalysis } from './utils/urlHelper';
 import { Header } from './components/Header';
 import { WizardStepper } from './components/WizardStepper';
 import { UrlInputBar } from './components/UrlInputBar';
 import { WebsitePreviewCard } from './components/WebsitePreviewCard';
 import { Customizer } from './components/Customizer';
-import { MethodSelector } from './components/MethodSelector';
 import { AndroidPhoneMockup } from './components/AndroidPhoneMockup';
 import { ResultSection } from './components/ResultSection';
 import { HelpModal } from './components/HelpModal';
@@ -21,6 +20,7 @@ import {
   CheckCircle2,
   Sliders,
   Eye,
+  PlusSquare,
 } from 'lucide-react';
 
 const INITIAL_URL = 'https://fr.wikipedia.org';
@@ -52,7 +52,7 @@ export default function App() {
       textColor: '#ffffff',
       gradientEnd: '#047857',
     },
-    method: 'standard',
+    method: 'pwa',
   });
 
   const stepContainerRef = useRef<HTMLDivElement>(null);
@@ -140,8 +140,8 @@ export default function App() {
     }
   };
 
-  // Step 3: Generate and go to Step 4
-  const handleGenerate = () => {
+  // Step 2: Generate icon and go directly to Step 3 (Installation)
+  const handleGenerateAndInstall = () => {
     try {
       confetti({
         particleCount: 80,
@@ -152,7 +152,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    goToStep(4);
+    goToStep(3);
   };
 
   // Reset wizard
@@ -198,19 +198,19 @@ export default function App() {
         <div className="text-center max-w-2xl mx-auto space-y-2 px-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-slate-200 text-xs text-slate-700 shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold text-emerald-800">Assistant Étape par Étape</span>
+            <span className="font-semibold text-emerald-800">Ajout d'Icône sur Mobile</span>
             <span className="text-slate-300">·</span>
             <span className="text-slate-600 font-medium">100% sans APK</span>
           </div>
           <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-slate-900 leading-tight">
-            Créateur de Raccourcis Android
+            Créateur d'Icône d'Écran d'Accueil Android
           </h1>
           <p className="text-xs sm:text-sm text-slate-600">
-            Suivez les 4 étapes guidées pour créer et installer votre raccourci écran d'accueil personnalisé.
+            Transformez n'importe quel site web en véritable icône installable sur l'écran d'accueil de votre smartphone.
           </p>
         </div>
 
-        {/* Wizard Stepper */}
+        {/* Wizard Stepper (3 Steps) */}
         <div ref={stepContainerRef}>
           <WizardStepper
             currentStep={currentStep}
@@ -247,7 +247,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Main 2-Column Grid: Wizard Steps on Left (7 cols), Android Phone Mockup on Right (5 cols) */}
+        {/* Main 2-Column Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Left Column: Wizard Steps */}
           <div
@@ -262,19 +262,19 @@ export default function App() {
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                        Étape 1 sur 4
+                        Étape 1 sur 3
                       </span>
                       <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                        Saisie et Analyse de l'adresse web
+                        Saisie du site web à transformer en icône
                       </h2>
                     </div>
                     <span className="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-medium hidden xs:inline">
-                      Extraction HD
+                      Favicon HD
                     </span>
                   </div>
 
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Saisissez l'adresse de votre site favori. Le système vérifie l'URL, extrait le protocole sécurisé, le titre officiel et les favicons disponibles.
+                    Saisissez l'adresse de votre site web favori. L'application extrait automatiquement son favicon, son nom officiel et son thème pour créer votre icône mobile.
                   </p>
 
                   <UrlInputBar
@@ -304,23 +304,23 @@ export default function App() {
                     disabled={isLoading || !url.trim()}
                     className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/15 disabled:opacity-40 transition-all min-h-[48px]"
                   >
-                    <span>Continuer vers la Personnalisation</span>
+                    <span>Personnaliser l'icône Android</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ================= STEP 2: Personnalisation ================= */}
+            {/* ================= STEP 2: Personnalisation de l'icône ================= */}
             {currentStep === 2 && (
               <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                      Étape 2 sur 4
+                      Étape 2 sur 3
                     </span>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                      Personnalisation de l'icône & du nom
+                      Personnalisation du nom & de l'icône Android
                     </h2>
                   </div>
                   <button
@@ -339,7 +339,7 @@ export default function App() {
                   onAddCustomIcon={handleAddCustomIcon}
                 />
 
-                {/* Step 2 Actions */}
+                {/* Step 2 Actions -> Directly Installs */}
                 <div className="flex flex-col-reverse xs:flex-row items-stretch xs:items-center justify-between pt-2 gap-2 sm:gap-3">
                   <button
                     type="button"
@@ -347,73 +347,33 @@ export default function App() {
                     className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-2xs transition-colors min-h-[44px]"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Retour</span>
+                    <span>Retour au site</span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => goToStep(3)}
-                    className="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/15 transition-all min-h-[44px]"
-                  >
-                    <span>Continuer vers le Choix de la Méthode</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ================= STEP 3: Choix de la Méthode ================= */}
-            {currentStep === 3 && (
-              <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                    Étape 3 sur 4
-                  </span>
-                  <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                    Choisissez votre Méthode de Création
-                  </h2>
-                </div>
-
-                <MethodSelector
-                  selectedMethod={config.method}
-                  onSelectMethod={(method: GenerationMethodId) => setConfig((prev) => ({ ...prev, method }))}
-                />
-
-                {/* Step 3 Actions */}
-                <div className="flex flex-col-reverse xs:flex-row items-stretch xs:items-center justify-between pt-2 gap-2 sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={() => goToStep(2)}
-                    className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-2xs transition-colors min-h-[44px]"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                    <span>Retour au style</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleGenerate}
+                    onClick={handleGenerateAndInstall}
                     className="px-7 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all min-h-[48px]"
                   >
-                    <Sparkles className="w-4 h-4 text-emerald-100" />
-                    <span>Générer le Raccourci Android</span>
+                    <PlusSquare className="w-4 h-4 text-emerald-100" />
+                    <span>Créer et Installer l'Icône sur mon Mobile</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* ================= STEP 4: Installation & Résultat ================= */}
-            {currentStep === 4 && analysis && (
+            {/* ================= STEP 3: Installation de l'icône sur mobile ================= */}
+            {currentStep === 3 && analysis && (
               <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200">
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Étape 4 sur 4 : Raccourci Prêt
+                      Étape 3 sur 3 : Icône Prête
                     </span>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                      Installation sur votre Smartphone
+                      Installation de l'icône sur votre écran d'accueil
                     </h2>
                   </div>
 
@@ -423,7 +383,7 @@ export default function App() {
                     className="text-xs text-slate-600 hover:text-slate-900 font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs min-h-[36px]"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Nouveau</span>
+                    <span>Autre site</span>
                   </button>
                 </div>
 
@@ -433,15 +393,15 @@ export default function App() {
                   onSimulateInPhone={() => setSimulationModalOpen(true)}
                 />
 
-                {/* Step 4 Return actions */}
+                {/* Step 3 Return actions */}
                 <div className="flex flex-col-reverse xs:flex-row items-stretch xs:items-center justify-between pt-2 gap-2 sm:gap-3">
                   <button
                     type="button"
-                    onClick={() => goToStep(3)}
+                    onClick={() => goToStep(2)}
                     className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-2xs transition-colors min-h-[44px]"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Modifier la configuration</span>
+                    <span>Modifier le nom ou l'icône</span>
                   </button>
 
                   <button
@@ -450,7 +410,7 @@ export default function App() {
                     className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-colors min-h-[44px]"
                   >
                     <RotateCcw className="w-4 h-4" />
-                    <span>Créer un autre raccourci</span>
+                    <span>Créer une nouvelle icône</span>
                   </button>
                 </div>
               </div>
@@ -467,7 +427,7 @@ export default function App() {
               <div className="w-full flex items-center justify-between pb-3 sm:pb-4 mb-3 sm:mb-4 border-b border-slate-100 text-xs">
                 <span className="font-semibold text-slate-800 flex items-center gap-1.5">
                   <Smartphone className="w-4 h-4 text-emerald-600" />
-                  Simulateur Android en Direct
+                  Rendu sur votre écran Android
                 </span>
                 <span className="text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   {config.iconShape.toUpperCase()}
@@ -483,25 +443,19 @@ export default function App() {
               {/* Live Status summary */}
               <div className="w-full mt-4 sm:mt-5 pt-3 sm:pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-600">
                 <div className="flex items-center justify-between">
-                  <span>Étape active :</span>
-                  <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[11px]">
-                    Étape {currentStep} / 4
+                  <span>Nom sous l'icône :</span>
+                  <span className="font-bold text-slate-900 text-[11px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                    {config.title}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Méthode choisie :</span>
-                  <span className="font-semibold text-slate-800 uppercase text-[11px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                    {config.method}
+                  <span>Forme adaptative :</span>
+                  <span className="font-semibold text-slate-800 capitalize">
+                    {config.iconShape}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Mode d'affichage :</span>
-                  <span className="font-semibold text-slate-800">
-                    {config.openMode === 'standalone' ? 'Plein écran (PWA)' : 'Navigateur par défaut'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Cible :</span>
+                  <span>Site web cible :</span>
                   <span className="font-mono text-[11px] text-emerald-700 truncate max-w-[170px] sm:max-w-[200px] font-medium">
                     {config.url}
                   </span>
@@ -521,7 +475,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* Mobile floating quick preview trigger (Only shown on mobile when on wizard tab and not at bottom) */}
+        {/* Mobile floating quick preview trigger */}
         <div className="lg:hidden fixed bottom-4 right-4 z-30">
           <button
             type="button"
@@ -531,7 +485,7 @@ export default function App() {
             {mobileTab === 'wizard' ? (
               <>
                 <Eye className="w-4 h-4 text-emerald-400" />
-                <span>Aperçu Écran</span>
+                <span>Voir mon icône</span>
               </>
             ) : (
               <>
@@ -561,10 +515,8 @@ export default function App() {
               </p>
             </div>
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed text-left">
-              <span className="font-semibold text-emerald-800">Simulation Android :</span>{' '}
-              {config.openMode === 'standalone'
-                ? 'Ce raccourci s\'ouvrira en plein écran sans barre d\'adresse comme une application native Android.'
-                : 'Ce raccourci s\'ouvrira dans un nouvel onglet de votre navigateur par défaut habituel.'}
+              <span className="font-semibold text-emerald-800">Icône d'écran d'accueil :</span>{' '}
+              Cette icône s'installe sur votre écran d'accueil Android et ouvre instantanément votre site web dans votre navigateur habituel.
             </div>
             <div className="flex items-center gap-2 pt-2">
               <button
@@ -597,7 +549,7 @@ export default function App() {
           <p className="flex items-center justify-center gap-2 font-medium flex-wrap">
             <span className="font-semibold text-slate-800">Web Shortcut Creator</span>
             <span>·</span>
-            <span>Compatible Google Pixel, Samsung Galaxy, Xiaomi, Motorola & tous appareils Android</span>
+            <span>Créateur d'icône d'écran d'accueil pour Google Pixel, Samsung Galaxy, Xiaomi & tous appareils Android</span>
           </p>
           <p className="text-slate-400 text-[11px]">
             Pour votre sécurité, Android exige toujours votre confirmation lors de l'ajout d'une icône sur l'écran d'accueil.

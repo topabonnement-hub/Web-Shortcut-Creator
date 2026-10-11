@@ -1,27 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { CustomShortcutConfig, WebsiteAnalysis } from '../types';
-import {
-  buildChromeIntentUrl,
-  buildUniversalIntentUrl,
-  generateHtmlShortcutContent,
-  generateWebManifestJson,
-  downloadFile,
-} from '../utils/urlHelper';
-import { BrowserGuide, BrowserTab } from './BrowserGuide';
+import { BrowserGuide } from './BrowserGuide';
 import { detectDeviceAndBrowser, DeviceAndBrowserInfo } from '../utils/browserDetector';
 import {
   QrCode,
   Share2,
   Copy,
   ExternalLink,
-  Download,
   Check,
-  Info,
   Smartphone,
   PlusSquare,
   Sparkles,
-  Zap,
   CheckCircle2,
   X,
   Compass,
@@ -62,8 +52,7 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
     };
   }, []);
 
-  // Compute final effective URL based on method
-  let effectiveActionUrl = config.url;
+  // Dedicated launcher URL with full Web App Manifest for mobile icon installation
   const launchParams = new URLSearchParams({
     url: config.url,
     name: config.title,
@@ -72,20 +61,9 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
   });
   const standaloneLaunchUrl = `${window.location.origin}/launch?${launchParams.toString()}`;
 
-  if (config.method === 'chrome') {
-    effectiveActionUrl = buildChromeIntentUrl(config.url);
-  } else if (config.method === 'pwa') {
-    effectiveActionUrl = standaloneLaunchUrl;
-  } else if (config.method === 'intent') {
-    effectiveActionUrl = buildUniversalIntentUrl(config.url);
-  }
-
-  // Generate QR Code on mount or config change
+  // Generate QR Code for mobile scanning
   useEffect(() => {
-    const urlForMobileScan =
-      config.method === 'pwa' ? standaloneLaunchUrl : config.url;
-
-    QRCode.toDataURL(urlForMobileScan, {
+    QRCode.toDataURL(standaloneLaunchUrl, {
       width: 280,
       margin: 1.5,
       color: {
@@ -100,7 +78,7 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
   // Handle Copy Link
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(config.url);
+      await navigator.clipboard.writeText(standaloneLaunchUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
@@ -114,8 +92,8 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
       try {
         await navigator.share({
           title: config.title,
-          text: `Raccourci Android pour ${config.title}`,
-          url: config.method === 'pwa' ? standaloneLaunchUrl : config.url,
+          text: `Installer le raccourci « ${config.title} » sur mon écran d'accueil Android`,
+          url: standaloneLaunchUrl,
         });
         setShareSuccess(true);
         setTimeout(() => setShareSuccess(false), 2000);
@@ -129,106 +107,106 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
     }
   };
 
-  // Handle Download HTML Launcher File
-  const handleDownloadHtmlLauncher = () => {
-    const html = generateHtmlShortcutContent(config);
-    const filename = `${config.title.toLowerCase().replace(/[^a-z0-9]/gi, '_') || 'raccourci'}.html`;
-    downloadFile(filename, html, 'text/html');
-  };
-
-  // Handle Download Manifest JSON
-  const handleDownloadManifest = () => {
-    const json = generateWebManifestJson(config);
-    downloadFile('manifest.json', json, 'application/manifest+json');
-  };
-
-  // Handle Download Windows / Android .url file
-  const handleDownloadUrlFile = () => {
-    const content = `[InternetShortcut]\nURL=${config.url}\nIconFile=${config.iconUrl}\n`;
-    const filename = `${config.title.toLowerCase().replace(/[^a-z0-9]/gi, '_') || 'raccourci'}.url`;
-    downloadFile(filename, content, 'text/plain');
-  };
-
-  // Handle Browser-Tailored Install Action
-  const handleBrowserInstall = async () => {
+  // Handle Direct Install Action
+  const handleInstallToHomeScreen = async () => {
     if (deferredPrompt) {
       try {
         deferredPrompt.prompt();
         const choiceResult = await deferredPrompt.userChoice;
         if (choiceResult.outcome === 'accepted') {
-          setInstallStatus(`Raccourci installé avec succès dans ${deviceInfo.browserName} !`);
+          setInstallStatus(`Icône « ${config.title} » ajoutée à votre écran d'accueil !`);
         }
         setDeferredPrompt(null);
         return;
       } catch {
-        // fallback to modal
+        // fallback
       }
     }
 
-    if (deviceInfo.isAndroid) {
-      // Direct opening in current browser
-      window.open(standaloneLaunchUrl, '_blank', 'noopener,noreferrer');
-      setInstallModalOpen(true);
-    } else {
-      // On desktop, show modal explaining phone scan or desktop bookmark
-      setInstallModalOpen(true);
+    // Open dedicated launcher page ready to be pinned
+    window.open(standaloneLaunchUrl, '_blank', 'noopener,noreferrer');
+    setInstallModalOpen(true);
+  };
+
+  const getShapeClass = () => {
+    switch (config.iconShape) {
+      case 'circle':
+        return 'rounded-full';
+      case 'squircle':
+        return 'rounded-[26%]';
+      case 'teardrop':
+        return 'rounded-2xl rounded-tr-none';
+      case 'rounded-square':
+      default:
+        return 'rounded-2xl';
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Dynamic Browser-Specific Install Banner */}
-      <div className="bg-gradient-to-r from-emerald-50 via-teal-50/60 to-cyan-50 border-2 border-emerald-300 rounded-2xl p-5 sm:p-6 shadow-md relative overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/20 text-2xl">
-              {deviceInfo.icon}
+      {/* Primary Mobile App Icon Installation Card */}
+      <div className="bg-gradient-to-r from-emerald-50 via-teal-50/50 to-cyan-50 border-2 border-emerald-300 rounded-3xl p-5 sm:p-7 shadow-md relative overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-6">
+          {/* Real customized icon preview */}
+          <div className="relative shrink-0">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 bg-white border-2 border-emerald-400 p-2 shadow-xl shadow-emerald-600/20 flex items-center justify-center overflow-hidden transition-transform hover:scale-105" style={{ borderRadius: config.iconShape === 'circle' ? '9999px' : config.iconShape === 'squircle' ? '26%' : '20px' }}>
+              <img
+                src={config.iconUrl}
+                alt={config.title}
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                  Navigateur détecté : {deviceInfo.browserName}
-                </span>
-                {deviceInfo.isAndroid ? (
-                  <span className="text-[10px] font-bold text-teal-800 bg-teal-100 px-2 py-0.5 rounded border border-teal-300">
-                    Appareil Android
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                    Ordinateur de bureau
-                  </span>
-                )}
-              </div>
-              <h3 className="font-bold text-lg text-slate-900 mt-1">
-                Installer « {config.title} » via {deviceInfo.browserName}
-              </h3>
-              <p className="text-xs text-slate-600 mt-0.5">
-                {deviceInfo.isAndroid
-                  ? deviceInfo.quickInstruction
-                  : `Pour l'écran d'accueil de votre téléphone : scannez le QR code ou ouvrez le raccourci dans ${deviceInfo.browserName}.`}
-              </p>
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-md">
+              <Sparkles className="w-3.5 h-3.5" />
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Details & Action */}
+          <div className="flex-1 text-center sm:text-left space-y-1.5">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
+              <Check className="w-3 h-3 stroke-[3]" />
+              <span>Icône Android Prête pour l'Écran d'Accueil</span>
+            </div>
+            <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+              {config.title}
+            </h3>
+            <p className="text-xs text-slate-600 max-w-xl">
+              Votre icône personnalisée est configurée. Elle s'installera directement sur votre écran d'accueil Android et ouvrira <strong>{config.url}</strong> dans votre navigateur habituel.
+            </p>
+          </div>
+
+          {/* Big Direct Install Button */}
+          <div className="w-full sm:w-auto flex flex-col gap-2 shrink-0">
             <button
-              onClick={handleBrowserInstall}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm transition-all shadow-md shadow-emerald-600/20 active:scale-[0.98]"
+              onClick={handleInstallToHomeScreen}
+              className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm sm:text-base transition-all shadow-lg shadow-emerald-600/25 active:scale-[0.98] flex items-center justify-center gap-2.5 min-h-[52px]"
             >
-              <PlusSquare className="w-4 h-4" />
-              <span>{deviceInfo.installButtonLabel}</span>
+              <PlusSquare className="w-5 h-5" />
+              <span>Ajouter à l'écran d'accueil</span>
             </button>
-            <button
-              onClick={handleShare}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-3.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs"
-            >
-              <Share2 className="w-4 h-4 text-emerald-600" />
-              <span>{shareSuccess ? 'Partagé !' : 'Partager'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleShare}
+                className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
+              >
+                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{shareSuccess ? 'Partagé !' : 'Partager'}</span>
+              </button>
+              <button
+                onClick={handleCopy}
+                className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                <span>{copied ? 'Copié' : 'Copier lien'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Status notification */}
+        {/* Success notification if installed */}
         {installStatus && (
           <div className="mt-4 p-3 rounded-xl bg-emerald-100 text-emerald-900 text-xs font-semibold flex items-center gap-2 border border-emerald-300">
             <CheckCircle2 className="w-4 h-4 text-emerald-700" />
@@ -237,83 +215,28 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
         )}
       </div>
 
-      {/* Browser-Tailored Install Method Card */}
-      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-md space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-          <div>
-            <h4 className="font-bold text-base text-slate-900 flex items-center gap-2">
-              <Compass className="w-5 h-5 text-emerald-600" />
-              Installation adaptée à votre configuration
-            </h4>
-            <p className="text-xs text-slate-500">
-              Procédure optimisée en fonction de {deviceInfo.browserName}
-            </p>
-          </div>
-          <span className="text-xs font-semibold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 self-start sm:self-auto">
-            {deviceInfo.isAndroid ? 'Android détecté' : 'Mode transfert PC → Mobile'}
-          </span>
-        </div>
-
-        {/* Highlighted box tailored to opening browser */}
-        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">{deviceInfo.icon}</span>
-              <h5 className="font-bold text-sm text-slate-900">
-                Action dans {deviceInfo.browserName} :
-              </h5>
-            </div>
-            <p className="text-xs text-slate-700 font-medium">
-              👉 {deviceInfo.quickInstruction}
-            </p>
-            <p className="text-[11px] text-slate-500">
-              Emplacement du menu : <strong className="text-slate-700">{deviceInfo.menuLocation}</strong> ({deviceInfo.menuIcon})
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <a
-              href={standaloneLaunchUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="flex-1 sm:flex-none py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-2xs"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>Ouvrir dans {deviceInfo.browserName}</span>
-            </a>
-            <button
-              type="button"
-              onClick={() => setInstallModalOpen(true)}
-              className="flex-1 sm:flex-none py-2.5 px-3.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-semibold text-xs transition-colors shadow-2xs"
-            >
-              Guide visuel
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Two-Column Layout: Mobile Transfer + Downloads */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Left Column: Transfer to Smartphone via QR Code */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-md flex flex-col justify-between">
+      {/* Two columns: Instant Transfer to Phone via QR Code + Direct Browser Instructions */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
+        {/* Transfer to Mobile Smartphone Card (5 cols on desktop) */}
+        <div className="md:col-span-5 bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <QrCode className="w-5 h-5 text-emerald-600" />
                 <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                  Transférer vers mon téléphone
+                  Installer sur mon smartphone
                 </h4>
               </div>
-              <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                Scan instantané
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Scan 3 secondes
               </span>
             </div>
 
             <p className="text-xs text-slate-600 mt-3 mb-4 leading-relaxed">
-              Si vous êtes sur votre ordinateur, visez ce QR Code avec l'appareil photo ou Google Lens de votre smartphone Android pour ouvrir directement la page et l'ajouter à votre écran d'accueil.
+              Scannez ce QR Code avec l'appareil photo ou Google Lens de votre téléphone Android pour ouvrir la page d'installation de l'icône :
             </p>
 
-            <div className="flex justify-center p-3 bg-white rounded-2xl shadow-sm max-w-[220px] mx-auto border-2 border-slate-200">
+            <div className="flex justify-center p-3 bg-white rounded-2xl shadow-sm max-w-[210px] mx-auto border-2 border-slate-200">
               {qrCodeDataUrl ? (
                 <img
                   src={qrCodeDataUrl}
@@ -328,140 +251,99 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
             </div>
           </div>
 
-          <div className="mt-5 space-y-2">
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={config.url}
-                className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 font-mono truncate select-all focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={handleCopy}
-                className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold flex items-center gap-1.5 shrink-0 border border-slate-200 transition-colors"
-                title="Copier le lien"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Copié</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copier</span>
-                  </>
-                )}
-              </button>
-            </div>
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <p className="text-[11px] text-center text-slate-500">
+              L'icône personnalisée <strong>« {config.title} »</strong> sera créée sur votre bureau Android.
+            </p>
           </div>
         </div>
 
-        {/* Right Column: Downloads & Direct Actions */}
-        <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-md flex flex-col justify-between">
+        {/* Quick 2-Step Action Card on Mobile (7 cols on desktop) */}
+        <div className="md:col-span-7 bg-white border border-slate-200/90 rounded-2xl p-5 sm:p-6 shadow-sm flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Download className="w-5 h-5 text-emerald-600" />
+                <Smartphone className="w-5 h-5 text-emerald-600" />
                 <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                  Téléchargements & Raccourcis Autonomes
+                  Comment l'icône apparaît sur votre téléphone
                 </h4>
               </div>
-              <span className="text-[10px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                Sans serveur
+              <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+                {deviceInfo.browserName}
               </span>
             </div>
 
-            <p className="text-xs text-slate-600 mt-3 mb-4 leading-relaxed">
-              Téléchargez des fichiers de raccourci autonomes prêts à l'emploi. Ils contiennent les icônes en haute résolution et les redirections vers votre site.
+            <p className="text-xs text-slate-600 mt-3 mb-3">
+              Sur votre smartphone Android, suivez cette manipulation simple pour poser l'icône sur votre écran d'accueil :
             </p>
 
+            {/* Visual step cards */}
             <div className="space-y-2.5">
-              {/* Download HTML launcher */}
-              <button
-                type="button"
-                onClick={handleDownloadHtmlLauncher}
-                className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/40 transition-all text-left flex items-center justify-between group shadow-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center font-mono text-xs font-bold">
-                    .HTML
-                  </div>
-                  <div>
-                    <h5 className="font-semibold text-xs text-slate-900 group-hover:text-emerald-800 transition-colors">
-                      Télécharger le Lanceur Web (.html)
-                    </h5>
-                    <p className="text-[11px] text-slate-500">
-                      Fichier léger autonome avec icône embarquée et redirection
-                    </p>
-                  </div>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  1
+                </span>
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900">
+                    Ouvrez la page sur votre téléphone
+                  </h5>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Touchez le bouton « Ajouter à l'écran d'accueil » ci-dessus ou scannez le QR Code.
+                  </p>
                 </div>
-                <Download className="w-4 h-4 text-slate-400 group-hover:text-emerald-600" />
-              </button>
+              </div>
 
-              {/* Download manifest.json */}
-              <button
-                type="button"
-                onClick={handleDownloadManifest}
-                className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-teal-500 hover:bg-teal-50/40 transition-all text-left flex items-center justify-between group shadow-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-teal-100 text-teal-800 border border-teal-300 flex items-center justify-center font-mono text-xs font-bold">
-                    .JSON
-                  </div>
-                  <div>
-                    <h5 className="font-semibold text-xs text-slate-900 group-hover:text-teal-800 transition-colors">
-                      Télécharger le Manifest PWA (manifest.json)
-                    </h5>
-                    <p className="text-[11px] text-slate-500">
-                      Configuration Web App Manifest avec display standalone
-                    </p>
-                  </div>
+              <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  2
+                </span>
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900">
+                    Dans le menu de votre navigateur ({deviceInfo.menuIcon})
+                  </h5>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                    Appuyez sur <strong className="text-slate-800">{deviceInfo.menuIcon}</strong> situé {deviceInfo.menuLocation}, puis sélectionnez <strong className="text-emerald-700">« {deviceInfo.menuActionText} »</strong>.
+                  </p>
                 </div>
-                <Download className="w-4 h-4 text-slate-400 group-hover:text-teal-600" />
-              </button>
+              </div>
 
-              {/* Download .url shortcut */}
-              <button
-                type="button"
-                onClick={handleDownloadUrlFile}
-                className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-slate-300 hover:bg-slate-100 transition-all text-left flex items-center justify-between group shadow-2xs"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-slate-200 text-slate-700 border border-slate-300 flex items-center justify-center font-mono text-xs font-bold">
-                    .URL
-                  </div>
-                  <div>
-                    <h5 className="font-semibold text-xs text-slate-900 group-hover:text-slate-800 transition-colors">
-                      Télécharger le Raccourci Standard (.url)
-                    </h5>
-                    <p className="text-[11px] text-slate-500">
-                      Format standard compatible fichiers et stockage externe
-                    </p>
-                  </div>
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                  ✓
+                </span>
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-emerald-950">
+                    Votre icône est immédiatement sur l'écran d'accueil
+                  </h5>
+                  <p className="text-xs text-emerald-900 mt-0.5">
+                    L'application apparaîtra comme une vraie icône native et ouvrira le site d'origine.
+                  </p>
                 </div>
-                <Download className="w-4 h-4 text-slate-400 group-hover:text-slate-600" />
-              </button>
+              </div>
             </div>
           </div>
 
-          <div className="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 flex items-start gap-2">
-            <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-            <span>
-              Les fichiers téléchargés peuvent être transférés sur votre téléphone via Google Drive, Bluetooth ou câble USB.
-            </span>
+          <div className="pt-2">
+            <a
+              href={standaloneLaunchUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors shadow-xs"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Ouvrir la page de l'icône maintenant</span>
+            </a>
           </div>
         </div>
       </div>
 
-      {/* Step by Step Browser Installation Guide - Pre-selects Detected Browser */}
+      {/* Browser specific illustrated guide tabs */}
       <BrowserGuide
         detectedBrowserId={deviceInfo.browserId}
         defaultBrowser={deviceInfo.browserId}
       />
 
-      {/* Interactive Install Modal with Tailored Browser Steps */}
+      {/* Interactive Install Modal */}
       {installModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
@@ -474,29 +356,33 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
             </button>
 
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-2xl">
-                {deviceInfo.icon}
+              <div className="w-14 h-14 rounded-2xl bg-white border-2 border-emerald-500 p-1.5 flex items-center justify-center shrink-0 shadow-sm">
+                <img
+                  src={config.iconUrl}
+                  alt={config.title}
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
                 <h4 className="font-bold text-base text-slate-900">
-                  Installation dans {deviceInfo.browserName}
+                  Installer l'icône « {config.title} »
                 </h4>
                 <p className="text-xs text-slate-500">
-                  {deviceInfo.isAndroid ? 'Sur votre smartphone Android' : 'Transfert vers votre smartphone'}
+                  Sur l'écran d'accueil de votre téléphone
                 </p>
               </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs text-slate-700 leading-relaxed">
               <p className="font-semibold text-slate-900">
-                👉 Comment ajouter l'icône dans {deviceInfo.browserName} :
+                👉 Pour afficher l'icône sur votre écran d'accueil Android :
               </p>
               <div className="flex items-start gap-2.5">
                 <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                   1
                 </span>
                 <span>
-                  Ouvrez la page cible dans {deviceInfo.browserName}.
+                  Ouvrez la page ci-dessous sur votre smartphone Android.
                 </span>
               </div>
               <div className="flex items-start gap-2.5">
@@ -504,20 +390,11 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
                   2
                 </span>
                 <span>
-                  Appuyez sur le menu <strong className="text-slate-900">({deviceInfo.menuIcon})</strong> situé {deviceInfo.menuLocation}.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                  3
-                </span>
-                <span>
-                  Touchez <strong className="text-emerald-800">« {deviceInfo.menuActionText} »</strong> pour valider l'ajout sur votre écran d'accueil.
+                  Touchez le menu <strong>({deviceInfo.menuIcon})</strong> de votre navigateur et appuyez sur <strong className="text-emerald-800">« {deviceInfo.menuActionText} »</strong>.
                 </span>
               </div>
             </div>
 
-            {/* Quick Actions inside modal */}
             <div className="space-y-2 pt-2">
               <a
                 href={standaloneLaunchUrl}
@@ -526,7 +403,7 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
                 className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
-                <span>Ouvrir dans {deviceInfo.browserName}</span>
+                <span>Ouvrir et installer sur mon écran</span>
               </a>
 
               <button
@@ -537,7 +414,7 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
                 }}
                 className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors border border-slate-200"
               >
-                {copied ? '✓ Lien copié !' : 'Copier l\'adresse du raccourci'}
+                {copied ? '✓ Lien copié !' : 'Copier l\'adresse pour l\'envoyer'}
               </button>
             </div>
           </div>
