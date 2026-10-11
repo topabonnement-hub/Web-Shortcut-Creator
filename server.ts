@@ -221,19 +221,23 @@ async function startServer() {
   app.get('/api/manifest', (req: Request, res: Response) => {
     const name = (req.query.name as string) || 'Web Shortcut';
     const shortName = (req.query.short_name as string) || name.slice(0, 12);
-    const startUrl = (req.query.url as string) || '/';
+    const targetUrl = (req.query.url as string) || '/';
     const icon = (req.query.icon as string) || '/favicon.ico';
-    const themeColor = (req.query.theme_color as string) || '#0f172a';
-    const bgColor = (req.query.bg_color as string) || '#020617';
+    const themeColor = (req.query.theme_color as string) || '#10b981';
+    const bgColor = (req.query.bg_color as string) || '#ffffff';
+    // The start_url must be on the same origin as the PWA manifest for Android compliance,
+    // and carries autolaunch=1 so that tapping the installed mobile icon immediately opens the website directly!
+    const startUrl = `/launch?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(name)}&icon=${encodeURIComponent(icon)}&theme=${encodeURIComponent(themeColor)}&autolaunch=1`;
 
     const manifest = {
       name,
       short_name: shortName,
       start_url: startUrl,
+      scope: '/',
       display: 'standalone',
       background_color: bgColor,
       theme_color: themeColor,
-      description: `Raccourci pour ${name}`,
+      description: `Application pour ${name}`,
       icons: [
         {
           src: icon,
@@ -270,6 +274,7 @@ async function startServer() {
     const name = (req.query.name as string) || 'Web Shortcut';
     const icon = (req.query.icon as string) || '';
     const themeColor = (req.query.theme as string) || '#10b981';
+    const autoLaunchParam = (req.query.autolaunch as string) === '1';
 
     const safeUrl = encodeURI(targetUrl);
     const safeName = String(name).replace(/"/g, '&quot;');
@@ -288,6 +293,20 @@ async function startServer() {
   <link rel="icon" href="${safeIcon || '/favicon.ico'}">
   <link rel="apple-touch-icon" href="${safeIcon || '/favicon.ico'}">
   <link rel="manifest" href="/api/manifest?name=${encodeURIComponent(name)}&url=${encodeURIComponent(targetUrl)}&icon=${encodeURIComponent(icon)}&theme_color=${encodeURIComponent(themeColor)}">
+  <script>
+    (function() {
+      var targetUrl = "${safeUrl}";
+      var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+                         window.navigator.standalone === true ||
+                         window.location.search.indexOf('autolaunch=1') !== -1 ||
+                         ${autoLaunchParam ? 'true' : 'false'};
+
+      // Après installation ou lors de l'ouverture depuis l'icône mobile, rediriger immédiatement sans afficher la page intermédiaire !
+      if (isStandalone) {
+        window.location.replace(targetUrl);
+      }
+    })();
+  </script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(function(err){ console.log(err); });
@@ -398,28 +417,31 @@ async function startServer() {
       border-radius: 12px;
       border: 1px solid #e2e8f0;
     }
-    #statusNotice {
+    .splash-view {
       display: none;
-      padding: 12px;
-      margin-bottom: 14px;
-      background: #d1fae5;
-      color: #065f46;
-      font-size: 12px;
-      font-weight: 600;
-      border-radius: 12px;
+    }
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #059669;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 20px auto 0;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card" id="mainCard">
     <span class="badge">Application Mobile Android</span>
     <div class="icon-wrap">
       ${safeIcon ? `<img src="${safeIcon}" alt="${safeName}" onerror="this.style.display='none'">` : '📱'}
     </div>
     <h1>${safeName}</h1>
     <p class="url">${safeUrl}</p>
-    
-    <div id="statusNotice"></div>
 
     <button id="installBtn" class="btn-install" onclick="triggerInstall()">
       📲 Installer l'application sur mon smartphone
@@ -430,11 +452,36 @@ async function startServer() {
     </a>
 
     <div class="hint">
-      <strong>Installation Android :</strong> Si la fenêtre ne s'ouvre pas automatiquement, appuyez sur le menu (<strong>⋮</strong> ou <strong>☰</strong>) de votre navigateur puis sur <em>« Installer l'application »</em>.
+      <strong>Installation :</strong> Appuyez sur le bouton ci-dessus pour ajouter l'application. Une fois installée, l'icône ouvrira <strong>directement</strong> votre site à chaque lancement !
     </div>
   </div>
 
+  <div id="splashView" class="splash-view">
+    <div class="icon-wrap" style="width: 88px; height: 88px; margin: 0 auto 16px;">
+      ${safeIcon ? `<img src="${safeIcon}" alt="${safeName}">` : '📱'}
+    </div>
+    <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin-bottom: 6px;">Ouverture de ${safeName}...</h2>
+    <p style="font-size: 13px; color: #64748b;">Accès direct à ${safeUrl}</p>
+    <div class="spinner"></div>
+  </div>
+
   <script>
+    var targetUrl = "${safeUrl}";
+    var autoLaunch = ${autoLaunchParam ? 'true' : 'false'};
+
+    // Si on est en mode application autonome ou autolaunch, basculer vers le splash et rediriger immédiatement
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true || autoLaunch) {
+      var mainCard = document.getElementById('mainCard');
+      var splashView = document.getElementById('splashView');
+      if (mainCard && splashView) {
+        mainCard.style.display = 'none';
+        splashView.style.display = 'block';
+      }
+      setTimeout(function() {
+        window.location.replace(targetUrl);
+      }, 80);
+    }
+
     var deferredPrompt;
     window.addEventListener('beforeinstallprompt', function(e) {
       e.preventDefault();
@@ -445,14 +492,18 @@ async function startServer() {
       }
     });
 
+    // Dès que l'application est installée, ouvrir directement le site web !
+    window.addEventListener('appinstalled', function() {
+      window.location.replace(targetUrl);
+    });
+
     function triggerInstall() {
       if (deferredPrompt) {
         deferredPrompt.prompt();
         deferredPrompt.userChoice.then(function(choice) {
           if (choice.outcome === 'accepted') {
-            var notice = document.getElementById('statusNotice');
-            notice.innerText = '✓ Application installée sur votre écran d\\'accueil !';
-            notice.style.display = 'block';
+            // Redirection immédiate vers le site une fois l'installation acceptée
+            window.location.replace(targetUrl);
           }
           deferredPrompt = null;
         });
