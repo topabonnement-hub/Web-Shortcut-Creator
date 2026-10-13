@@ -89,10 +89,10 @@ export const Customizer: React.FC<CustomizerProps> = ({
       <div className="flex items-center justify-between pb-3 border-b border-slate-100">
         <div>
           <h3 className="font-bold text-base sm:text-lg text-slate-900">
-            Personnalisation du Raccourci
+            Personnaliser l'icône
           </h3>
           <p className="text-xs text-slate-500">
-            Ajustez le nom affiché sur l'écran d'accueil et choisissez l'icône Android
+            Choisissez le nom et le style de l'icône pour votre écran d'accueil
           </p>
         </div>
       </div>
@@ -323,27 +323,9 @@ export const Customizer: React.FC<CustomizerProps> = ({
       <div className="space-y-2 pt-2 border-t border-slate-100">
         <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
           <Maximize2 className="w-3.5 h-3.5 text-emerald-600" />
-          Comportement à l'ouverture
+          Affichage à l'ouverture
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => onChange({ openMode: 'browser' })}
-            className={`p-3 rounded-xl border text-left transition-all ${
-              config.openMode === 'browser'
-                ? 'border-emerald-600 bg-emerald-50/70 text-slate-900 ring-2 ring-emerald-500/20 shadow-xs'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-            }`}
-          >
-            <div className="flex items-center gap-2 font-semibold text-xs text-slate-900 mb-1">
-              <Compass className="w-4 h-4 text-emerald-600" />
-              Navigateur standard
-            </div>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Ouvre le site dans un onglet standard de votre navigateur habituel (avec barre d'adresse et favoris).
-            </p>
-          </button>
-
           <button
             type="button"
             onClick={() => onChange({ openMode: 'standalone' })}
@@ -353,12 +335,30 @@ export const Customizer: React.FC<CustomizerProps> = ({
                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
             }`}
           >
-            <div className="flex items-center gap-2 font-semibold text-xs text-slate-900 mb-1">
-              <Maximize2 className="w-4 h-4 text-teal-600" />
-              Plein écran autonome (PWA)
+            <div className="flex items-center gap-2 font-semibold text-xs text-slate-900 mb-0.5">
+              <Maximize2 className="w-4 h-4 text-emerald-600" />
+              Plein écran autonome (Recommandé)
             </div>
-            <p className="text-[11px] text-slate-500 leading-normal">
-              Expérience immersive sans barre d'adresse, comme une application mobile installée depuis le Play Store.
+            <p className="text-[11px] text-slate-500">
+              S'ouvre sans barre d'adresse, comme une application mobile native.
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChange({ openMode: 'browser' })}
+            className={`p-3 rounded-xl border text-left transition-all ${
+              config.openMode === 'browser'
+                ? 'border-emerald-600 bg-emerald-50/70 text-slate-900 ring-2 ring-emerald-500/20 shadow-xs'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-2 font-semibold text-xs text-slate-900 mb-0.5">
+              <Compass className="w-4 h-4 text-teal-600" />
+              Navigateur standard
+            </div>
+            <p className="text-[11px] text-slate-500">
+              S'ouvre dans un onglet classique avec barre de navigation.
             </p>
           </button>
         </div>

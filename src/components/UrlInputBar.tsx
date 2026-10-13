@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Globe, Search, ArrowRight, X, Clipboard, Loader2, Sparkles } from 'lucide-react';
+import { Globe, Search, ArrowRight, X, Clipboard, Loader2, Sparkles, RotateCcw } from 'lucide-react';
 
 interface UrlInputBarProps {
   url: string;
@@ -7,6 +7,7 @@ interface UrlInputBarProps {
   onAnalyze: () => void;
   isLoading: boolean;
   error?: string | null;
+  onPurge?: () => void;
 }
 
 const PRESET_SITES = [
@@ -24,6 +25,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
   onAnalyze,
   isLoading,
   error,
+  onPurge,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
 
@@ -70,23 +72,25 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
             onKeyDown={handleKeyDown}
-            placeholder="Adresse web (ex: lemonde.fr)..."
+            placeholder="https://exemple.com..."
             className="w-full py-3.5 px-2.5 sm:px-2 bg-transparent text-slate-900 placeholder:text-slate-400 text-sm sm:text-base outline-none focus:outline-none"
             autoComplete="url"
             autoCapitalize="none"
             spellCheck="false"
           />
 
-          {/* Quick action: Clear */}
+          {/* Quick action: Clear & Purge */}
           {url && !isLoading && (
-            <button
-              onClick={() => onUrlChange('')}
-              className="p-2 mr-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
-              title="Effacer"
-              type="button"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1 mr-2">
+              <button
+                onClick={() => onUrlChange('')}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
+                title="Effacer"
+                type="button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           )}
 
           {/* Quick action: Paste */}
@@ -119,7 +123,7 @@ export const UrlInputBar: React.FC<UrlInputBarProps> = ({
             ) : (
               <>
                 <Search className="w-4 h-4 text-emerald-100" />
-                <span>Analyze Website</span>
+                <span>Analyser</span>
                 <ArrowRight className="w-4 h-4 ml-0.5 text-emerald-100 hidden xs:inline" />
               </>
             )}

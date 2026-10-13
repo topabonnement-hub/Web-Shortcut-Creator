@@ -27,6 +27,7 @@ export interface WebsiteAnalysis {
 export type AndroidIconShape = 'circle' | 'squircle' | 'rounded-square' | 'teardrop';
 
 export interface CustomShortcutConfig {
+  id?: string;
   url: string;
   title: string;
   iconUrl: string;

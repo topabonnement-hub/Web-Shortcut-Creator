@@ -21,33 +21,45 @@ import {
   Sliders,
   Eye,
   PlusSquare,
+  X,
 } from 'lucide-react';
 
-const INITIAL_URL = 'https://fr.wikipedia.org';
+function createUniqueAppId(nameOrUrl?: string): string {
+  const clean = (nameOrUrl || 'app')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 10);
+  const ts = Date.now().toString(36);
+  const rand = Math.random().toString(36).substring(2, 7);
+  return `app_${clean ? clean + '_' : ''}${ts}_${rand}`;
+}
 
 export default function App() {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [maxReachedStep, setMaxReachedStep] = useState<number>(1);
   const [mobileTab, setMobileTab] = useState<'wizard' | 'preview'>('wizard');
 
-  const [url, setUrl] = useState<string>(INITIAL_URL);
+  const [url, setUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [purgeToast, setPurgeToast] = useState<string | null>(null);
 
   const [analysis, setAnalysis] = useState<WebsiteAnalysis | null>(null);
   const [customIcons, setCustomIcons] = useState<IconSource[]>([]);
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [simulationModalOpen, setSimulationModalOpen] = useState<boolean>(false);
+  const [fullPageModalOpen, setFullPageModalOpen] = useState<boolean>(false);
 
   const [config, setConfig] = useState<CustomShortcutConfig>({
-    url: INITIAL_URL,
-    title: 'Wikipédia',
-    iconUrl: 'https://www.google.com/s2/favicons?domain=fr.wikipedia.org&sz=128',
+    id: createUniqueAppId('new'),
+    url: '',
+    title: 'Mon Application',
+    iconUrl: '/favicon.ico',
     iconShape: 'squircle',
     themeColor: '#10b981',
-    openMode: 'browser',
+    openMode: 'standalone',
     customMonogram: {
-      text: 'W',
+      text: 'A',
       bgColor: '#10b981',
       textColor: '#ffffff',
       gradientEnd: '#047857',
@@ -65,6 +77,42 @@ export default function App() {
     }
     setMobileTab('wizard');
     stepContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Completely purge all form and cached data to create a fresh new independent icon
+  const handlePurgeAllData = (notify = true) => {
+    setUrl('');
+    setAnalysis(null);
+    setError(null);
+    setCustomIcons([]);
+    const freshId = createUniqueAppId('new');
+    setConfig({
+      id: freshId,
+      url: '',
+      title: 'Mon Application',
+      iconUrl: '/favicon.ico',
+      iconShape: 'squircle',
+      themeColor: '#10b981',
+      openMode: 'standalone',
+      customMonogram: {
+        text: 'A',
+        bgColor: '#10b981',
+        textColor: '#ffffff',
+        gradientEnd: '#047857',
+      },
+      method: 'pwa',
+    });
+    setCurrentStep(1);
+    setMaxReachedStep(1);
+    setMobileTab('wizard');
+
+    // Flush server memory registry
+    fetch('/api/purge', { method: 'POST' }).catch(() => {});
+
+    if (notify) {
+      setPurgeToast('Données purgées avec succès. Prêt pour un nouveau raccourci !');
+      setTimeout(() => setPurgeToast(null), 3500);
+    }
   };
 
   // Analyze website function
@@ -90,33 +138,54 @@ export default function App() {
       if (response.ok) {
         const data: WebsiteAnalysis = await response.json();
         setAnalysis(data);
+        const uniqueAppId = createUniqueAppId(data.title || normalized);
         setConfig((prev) => ({
           ...prev,
+          id: uniqueAppId,
           url: data.url,
           title: data.title || prev.title,
           iconUrl: data.defaultIcon || prev.iconUrl,
           themeColor: data.themeColor || prev.themeColor,
+          customMonogram: {
+            ...prev.customMonogram,
+            text: (data.title || 'A').charAt(0).toUpperCase(),
+            bgColor: data.themeColor || '#10b981',
+          },
         }));
       } else {
         const fallback = generateClientFallbackAnalysis(normalized);
         setAnalysis(fallback);
+        const uniqueAppId = createUniqueAppId(fallback.title || normalized);
         setConfig((prev) => ({
           ...prev,
+          id: uniqueAppId,
           url: fallback.url,
           title: fallback.title,
           iconUrl: fallback.defaultIcon,
           themeColor: fallback.themeColor,
+          customMonogram: {
+            ...prev.customMonogram,
+            text: (fallback.title || 'A').charAt(0).toUpperCase(),
+            bgColor: fallback.themeColor || '#10b981',
+          },
         }));
       }
     } catch {
       const fallback = generateClientFallbackAnalysis(normalized);
       setAnalysis(fallback);
+      const uniqueAppId = createUniqueAppId(fallback.title || normalized);
       setConfig((prev) => ({
         ...prev,
+        id: uniqueAppId,
         url: fallback.url,
         title: fallback.title,
         iconUrl: fallback.defaultIcon,
         themeColor: fallback.themeColor,
+        customMonogram: {
+          ...prev.customMonogram,
+          text: (fallback.title || 'A').charAt(0).toUpperCase(),
+          bgColor: fallback.themeColor || '#10b981',
+        },
       }));
     } finally {
       setIsLoading(false);
@@ -125,11 +194,6 @@ export default function App() {
       }
     }
   };
-
-  // Initial load
-  useEffect(() => {
-    analyzeWebsite(INITIAL_URL);
-  }, []);
 
   // Step 1: Proceed to Step 2
   const handleProceedFromStep1 = async () => {
@@ -155,13 +219,9 @@ export default function App() {
     goToStep(3);
   };
 
-  // Reset wizard
+  // Reset wizard & purge data
   const handleResetWizard = () => {
-    setUrl('');
-    setAnalysis(null);
-    setCurrentStep(1);
-    setMaxReachedStep(1);
-    setMobileTab('wizard');
+    handlePurgeAllData(true);
   };
 
   // Custom icon added
@@ -187,26 +247,48 @@ export default function App() {
     ]),
   ];
 
+  // Go to Home (Step 1)
+  const handleGoHome = () => {
+    goToStep(1);
+    setMobileTab('wizard');
+    setError(null);
+    if (window.location.pathname !== '/' || window.location.search) {
+      window.history.pushState({}, '', '/');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900 transition-colors">
       {/* App Header */}
-      <Header onOpenHelpModal={() => setIsHelpOpen(true)} />
+      <Header
+        onOpenHelpModal={() => setIsHelpOpen(true)}
+        onPurgeData={() => handlePurgeAllData(true)}
+        onGoHome={handleGoHome}
+      />
+
+      {/* Floating purge notification toast */}
+      {purgeToast && (
+        <div className="fixed top-20 right-4 sm:right-8 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700 text-xs sm:text-sm font-semibold animate-in slide-in-from-top-3">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{purgeToast}</span>
+          <button
+            onClick={() => setPurgeToast(null)}
+            className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-4 sm:space-y-6">
         {/* Intro banner */}
-        <div className="text-center max-w-2xl mx-auto space-y-2 px-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white border border-slate-200 text-xs text-slate-700 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="font-semibold text-emerald-800">Ajout d'Icône sur Mobile</span>
-            <span className="text-slate-300">·</span>
-            <span className="text-slate-600 font-medium">100% sans APK</span>
-          </div>
+        <div className="text-center max-w-xl mx-auto space-y-1.5 px-2">
           <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight text-slate-900 leading-tight">
-            Créateur d'Icône d'Écran d'Accueil Android
+            Créer une icône Android pour votre site web
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600">
-            Transformez n'importe quel site web en véritable icône installable sur l'écran d'accueil de votre smartphone.
+          <p className="text-xs sm:text-sm text-slate-500">
+            Installation directe sur l'écran d'accueil de votre smartphone, sans APK.
           </p>
         </div>
 
@@ -231,7 +313,7 @@ export default function App() {
             }`}
           >
             <Sliders className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Étape {currentStep} : Configuration</span>
+            <span>Étape {currentStep}</span>
           </button>
           <button
             type="button"
@@ -243,7 +325,7 @@ export default function App() {
             }`}
           >
             <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Aperçu Smartphone</span>
+            <span>Aperçu</span>
           </button>
         </div>
 
@@ -265,17 +347,10 @@ export default function App() {
                         Étape 1 sur 3
                       </span>
                       <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                        Saisie du site web à transformer en icône
+                        Saisir l'adresse du site web
                       </h2>
                     </div>
-                    <span className="text-xs px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 font-medium hidden xs:inline">
-                      Favicon HD
-                    </span>
                   </div>
-
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Saisissez l'adresse de votre site web favori. L'application extrait automatiquement son favicon, son nom officiel et son thème pour créer votre icône mobile.
-                  </p>
 
                   <UrlInputBar
                     url={url}
@@ -283,6 +358,7 @@ export default function App() {
                     onAnalyze={() => analyzeWebsite(url)}
                     isLoading={isLoading}
                     error={error}
+                    onPurge={() => handlePurgeAllData(true)}
                   />
                 </div>
 
@@ -304,7 +380,7 @@ export default function App() {
                     disabled={isLoading || !url.trim()}
                     className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/15 disabled:opacity-40 transition-all min-h-[48px]"
                   >
-                    <span>Personnaliser l'icône Android</span>
+                    <span>Personnaliser l'icône</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -320,7 +396,7 @@ export default function App() {
                       Étape 2 sur 3
                     </span>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                      Personnalisation du nom & de l'icône Android
+                      Personnaliser l'icône
                     </h2>
                   </div>
                   <button
@@ -339,7 +415,7 @@ export default function App() {
                   onAddCustomIcon={handleAddCustomIcon}
                 />
 
-                {/* Step 2 Actions -> Directly Installs */}
+                {/* Step 2 Actions */}
                 <div className="flex flex-col-reverse xs:flex-row items-stretch xs:items-center justify-between pt-2 gap-2 sm:gap-3">
                   <button
                     type="button"
@@ -347,7 +423,7 @@ export default function App() {
                     className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-2xs transition-colors min-h-[44px]"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Retour au site</span>
+                    <span>Retour</span>
                   </button>
 
                   <button
@@ -356,7 +432,7 @@ export default function App() {
                     className="px-7 py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all min-h-[48px]"
                   >
                     <PlusSquare className="w-4 h-4 text-emerald-100" />
-                    <span>Installer comme Application sur Mobile</span>
+                    <span>Installer sur mobile</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -370,27 +446,30 @@ export default function App() {
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Étape 3 sur 3 : Application Prête
+                      Étape 3 sur 3
                     </span>
                     <h2 className="text-base sm:text-lg font-bold text-slate-900">
-                      Installation de l'application sur votre smartphone
+                      Installer l'application
                     </h2>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleResetWizard}
-                    className="text-xs text-slate-600 hover:text-slate-900 font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 transition-colors shadow-2xs min-h-[36px]"
+                    className="text-xs text-rose-700 hover:text-rose-900 font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-200 hover:bg-rose-100 transition-colors shadow-2xs min-h-[36px]"
+                    title="Nouveau raccourci"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Autre site</span>
+                    <span>Nouveau</span>
                   </button>
                 </div>
 
                 <ResultSection
                   config={config}
                   analysis={analysis}
-                  onSimulateInPhone={() => setSimulationModalOpen(true)}
+                  onSimulateInPhone={() => setFullPageModalOpen(true)}
+                  onOpenFullPage={() => setFullPageModalOpen(true)}
+                  onPurgeData={() => handlePurgeAllData(true)}
                 />
 
                 {/* Step 3 Return actions */}
@@ -401,16 +480,16 @@ export default function App() {
                     className="px-5 py-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-2xs transition-colors min-h-[44px]"
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    <span>Modifier le nom ou l'icône</span>
+                    <span>Modifier</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleResetWizard}
-                    className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-colors min-h-[44px]"
+                    className="px-5 py-3 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-2xs transition-all min-h-[44px]"
                   >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Créer une nouvelle icône</span>
+                    <RotateCcw className="w-4 h-4 text-slate-500" />
+                    <span>Nouveau raccourci</span>
                   </button>
                 </div>
               </div>
@@ -437,7 +516,8 @@ export default function App() {
               {/* The interactive Mockup */}
               <AndroidPhoneMockup
                 config={config}
-                onSimulateLaunch={() => setSimulationModalOpen(true)}
+                onSimulateLaunch={() => {}}
+                onOpenFullScreen={() => setFullPageModalOpen(true)}
               />
 
               {/* Live Status summary */}
@@ -510,31 +590,109 @@ export default function App() {
             </div>
             <div>
               <h3 className="font-bold text-lg text-slate-900">{config.title}</h3>
-              <p className="text-xs text-slate-500 mt-0.5 break-all font-mono">
-                {config.url}
+              <p className="text-xs text-emerald-700 font-semibold mt-1">
+                Application Mobile Android Pleine Page
               </p>
             </div>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed text-left">
-              <span className="font-semibold text-emerald-800">Icône d'écran d'accueil :</span>{' '}
-              Cette icône s'installe sur votre écran d'accueil Android et ouvre instantanément votre site web dans votre navigateur habituel.
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 leading-relaxed text-left space-y-1">
+              <span className="font-semibold text-slate-900 block">Affichage Pleine Page :</span>
+              <p className="text-slate-600">
+                L'application s'ouvre sur tout l'écran, sans afficher de barre d'adresse ni de lien au sommet.
+              </p>
             </div>
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setSimulationModalOpen(false);
+                  setFullPageModalOpen(true);
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+              >
+                <Eye className="w-4 h-4" />
+                <span>Afficher en Pleine Page (Full Page)</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setSimulationModalOpen(false)}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors"
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors"
               >
                 Fermer
               </button>
-              <a
-                href={config.url}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-xs"
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Page Mobile Web App Modal (Zero link shown at the top) */}
+      {fullPageModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-3xl max-w-4xl w-full h-[94vh] sm:h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            {/* Top Bar with App Branding - NO URL/LINK DISPLAYED */}
+            <div className="px-4 py-3 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 p-1 flex items-center justify-center overflow-hidden">
+                  <img
+                    src={config.iconUrl}
+                    alt={config.title}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm sm:text-base text-slate-900 leading-tight">
+                    {config.title}
+                  </h3>
+                  <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Plein écran (sans barre d'adresse)
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/launch?url=${encodeURIComponent(config.url)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="hidden xs:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Ouvrir en plein écran</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() => setFullPageModalOpen(false)}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  title="Fermer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Embedded Live Web App in Full Page */}
+            <div className="flex-1 w-full bg-slate-50 relative overflow-hidden">
+              <iframe
+                src={`/api/view?url=${encodeURIComponent(config.url)}`}
+                className="w-full h-full border-none bg-white"
+                title={config.title}
+                allow="fullscreen; camera; microphone; geolocation"
+              />
+            </div>
+
+            {/* Bottom Bar Controls */}
+            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+              <span className="text-[11px] text-slate-500">
+                Mode application autonome
+              </span>
+              <button
+                type="button"
+                onClick={() => setFullPageModalOpen(false)}
+                className="px-4 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold transition-colors"
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Ouvrir le site
-              </a>
+                Fermer
+              </button>
             </div>
           </div>
         </div>
@@ -544,15 +702,10 @@ export default function App() {
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
 
       {/* Footer */}
-      <footer className="border-t border-slate-200/90 bg-white py-6 sm:py-8 mt-8 sm:mt-12 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto px-4 space-y-2">
-          <p className="flex items-center justify-center gap-2 font-medium flex-wrap">
-            <span className="font-semibold text-slate-800">Web Shortcut Creator</span>
-            <span>·</span>
-            <span>Créateur d'icône d'écran d'accueil pour Google Pixel, Samsung Galaxy, Xiaomi & tous appareils Android</span>
-          </p>
-          <p className="text-slate-400 text-[11px]">
-            Pour votre sécurité, Android exige toujours votre confirmation lors de l'ajout d'une icône sur l'écran d'accueil.
+      <footer className="border-t border-slate-200/90 bg-white py-6 mt-8 sm:mt-12 text-center text-xs text-slate-400">
+        <div className="max-w-7xl mx-auto px-4">
+          <p className="font-medium text-slate-600">
+            Web Shortcut Creator · Raccourcis et icônes d'écran d'accueil Android
           </p>
         </div>
       </footer>

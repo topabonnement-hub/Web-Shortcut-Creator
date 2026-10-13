@@ -218,47 +218,25 @@ export const BrowserGuide: React.FC<BrowserGuideProps> = ({
       </div>
 
       {/* Steps List */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {current.steps.map((st) => (
           <div
             key={st.step}
-            className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-3"
+            className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-start gap-2.5"
           >
-            <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+            <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
               {st.step}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <h5 className="font-semibold text-xs sm:text-sm text-slate-900">
                 {st.title}
               </h5>
-              <p className="text-xs text-slate-600 leading-relaxed">
+              <p className="text-xs text-slate-500 leading-normal">
                 {st.desc}
               </p>
-              {st.highlight && (
-                <p className="text-[11px] font-semibold text-emerald-700">
-                  👉 {st.highlight}
-                </p>
-              )}
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Browser specific tip */}
-      <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
-        <span className="text-emerald-700 font-bold text-sm">💡</span>
-        <span>{current.tip}</span>
-      </div>
-
-      {/* Security explanation */}
-      <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-start gap-2.5 leading-relaxed">
-        <ShieldAlert className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-semibold text-slate-800">
-            Sécurité système Android :{' '}
-          </span>
-          Chaque navigateur nécessite votre action dans son menu afin d'éviter tout ajout de raccourci non désiré.
-        </div>
       </div>
     </div>
   );

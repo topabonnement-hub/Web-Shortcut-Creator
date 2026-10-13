@@ -78,17 +78,14 @@ export const WebsitePreviewCard: React.FC<WebsitePreviewCardProps> = ({
         <p className="line-clamp-2">{analysis.description}</p>
       </div>
 
-      {/* Crawl Notice / Fallback honest information banner */}
+      {/* Notice if fallback used */}
       {analysis.crawlStatus === 'fallback' && (
-        <div className="mt-4 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-semibold text-amber-900">
-              Extraction automatique partielle
-            </p>
-            <p className="text-amber-800 mt-0.5 leading-relaxed">
-              Ce serveur web restreint les requêtes d'analyse automatique externes. Le domaine a été identifié et les favicons haute définition ont été récupérés via les services sécurisés Google et DuckDuckGo. Vous pouvez ajuster le nom et téléverser une icône ci-dessous.
-            </p>
+        <div className="mt-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="text-amber-800">
+              Favicons HD récupérés avec succès. Vous pouvez modifier le nom ou l'icône à l'étape suivante.
+            </span>
           </div>
           <button
             onClick={onOpenManualCustomizer}
