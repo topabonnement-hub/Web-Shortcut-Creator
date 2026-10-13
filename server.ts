@@ -320,18 +320,11 @@ async function startServer() {
     const appId = (req.params.id as string) || (req.query.id as string) || 'app_default';
     const record = resolveShortcut(appId, req.query);
 
-    const safeId = encodeURIComponent(appId);
-    const startUrl = `/app/${safeId}/?url=${encodeURIComponent(record.url)}&name=${encodeURIComponent(record.name)}&icon=${encodeURIComponent(record.icon)}&theme=${encodeURIComponent(record.themeColor)}&id=${safeId}&autolaunch=1`;
-
-    // CRITICAL: id and scope MUST be unique per app so Chrome/Android installs each icon as a SEPARATE APP
     const manifest = {
-      id: `/app/${safeId}/`,
       name: record.name,
       short_name: record.shortName,
-      start_url: startUrl,
-      scope: `/app/${safeId}/`,
+      start_url: record.url,
       display: 'standalone',
-      display_override: ['standalone', 'fullscreen', 'window-controls-overlay'],
       background_color: record.bgColor,
       theme_color: record.themeColor,
       description: `Application pour ${record.name}`,
@@ -371,250 +364,18 @@ async function startServer() {
     `);
   });
 
-  // Shared Launcher HTML Generator
-  function renderLauncherHtml(appId: string, record: ShortcutRecord, autoLaunch: boolean): string {
-    const safeId = encodeURIComponent(appId);
-    const safeName = String(record.name).replace(/"/g, '&quot;');
-    const safeIcon = record.icon ? encodeURI(record.icon) : '';
-    const themeColor = record.themeColor || '#10b981';
-    const viewProxyUrl = `/api/view?url=${encodeURIComponent(record.url)}`;
-    const manifestUrl = `/app/${safeId}/manifest.json?url=${encodeURIComponent(record.url)}&name=${encodeURIComponent(record.name)}&icon=${encodeURIComponent(record.icon)}&theme_color=${encodeURIComponent(themeColor)}&id=${safeId}`;
-    const swUrl = `/app/${safeId}/sw.js`;
-
-    return `<!DOCTYPE html>
-<html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>${safeName}</title>
-  <meta name="theme-color" content="${themeColor}">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="icon" href="${safeIcon || '/favicon.ico'}">
-  <link rel="apple-touch-icon" href="${safeIcon || '/favicon.ico'}">
-  <link rel="manifest" href="${manifestUrl}">
-  <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('${swUrl}', { scope: '/app/${safeId}/' }).catch(function(){});
-    }
-  </script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #0f172a;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    }
-    /* Full Page Iframe - No URL or address bar */
-    #fullPageFrame {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100dvh;
-      border: none;
-      margin: 0;
-      padding: 0;
-      z-index: 10;
-      background: #ffffff;
-    }
-    /* Floating install banner if not yet installed */
-    .install-banner {
-      position: fixed;
-      bottom: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 50;
-      background: rgba(255, 255, 255, 0.98);
-      backdrop-filter: blur(16px);
-      border: 1px solid #e2e8f0;
-      border-radius: 20px;
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.25);
-      max-width: 92vw;
-      width: 390px;
-      animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    @keyframes slideUp {
-      from { transform: translate(-50%, 40px); opacity: 0; }
-      to { transform: translate(-50%, 0); opacity: 1; }
-    }
-    .install-banner.hidden { display: none !important; }
-    .banner-icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 10px;
-      background: #f1f5f9;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      flex-shrink: 0;
-      border: 1px solid #e2e8f0;
-    }
-    .banner-icon img { width: 100%; height: 100%; object-fit: cover; }
-    .banner-text { flex: 1; min-width: 0; text-align: left; }
-    .banner-title { font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .banner-sub { font-size: 11px; color: #64748b; }
-    .banner-btn {
-      background: #059669;
-      color: #ffffff;
-      border: none;
-      border-radius: 12px;
-      padding: 8px 14px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      box-shadow: 0 4px 10px -2px rgba(5, 150, 105, 0.4);
-      white-space: nowrap;
-    }
-    .banner-btn:active { transform: scale(0.96); }
-    .banner-close {
-      background: none;
-      border: none;
-      color: #94a3b8;
-      font-size: 16px;
-      cursor: pointer;
-      padding: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .floating-fab {
-      position: fixed;
-      top: 12px;
-      right: 12px;
-      z-index: 40;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: rgba(15, 23, 42, 0.4);
-      backdrop-filter: blur(8px);
-      color: white;
-      border: 1px solid rgba(255,255,255,0.2);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      opacity: 0.3;
-      transition: opacity 0.2s;
-    }
-    .floating-fab:hover, .floating-fab:active { opacity: 0.9; }
-  </style>
-</head>
-<body>
-  <!-- Full Page Website - NO LINK SHOWN AT TOP -->
-  <iframe
-    id="fullPageFrame"
-    src="${viewProxyUrl}"
-    allow="fullscreen; camera; microphone; geolocation; autoplay"
-    title="${safeName}"
-  ></iframe>
-
-  <!-- Minimal floating install banner if running in regular browser -->
-  <div id="installBanner" class="install-banner">
-    <div class="banner-icon">
-      ${safeIcon ? `<img src="${safeIcon}" alt="${safeName}">` : '📱'}
-    </div>
-    <div class="banner-text">
-      <div class="banner-title">${safeName}</div>
-      <div class="banner-sub">Installer sur l'écran d'accueil</div>
-    </div>
-    <button class="banner-btn" onclick="triggerInstall()">
-      Installer
-    </button>
-    <button class="banner-close" onclick="dismissBanner()" title="Fermer et voir plein écran">
-      ✕
-    </button>
-  </div>
-
-  <button class="floating-fab" onclick="reloadFrame()" title="Actualiser la page">
-    ↻
-  </button>
-
-  <script>
-    var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
-                       window.navigator.standalone === true ||
-                       ${autoLaunch ? 'true' : 'false'};
-
-    if (isStandalone) {
-      var banner = document.getElementById('installBanner');
-      if (banner) banner.classList.add('hidden');
-    }
-
-    function dismissBanner() {
-      var banner = document.getElementById('installBanner');
-      if (banner) banner.classList.add('hidden');
-    }
-
-    function reloadFrame() {
-      var frame = document.getElementById('fullPageFrame');
-      if (frame) frame.src = frame.src;
-    }
-
-    var deferredPrompt;
-    window.addEventListener('beforeinstallprompt', function(e) {
-      e.preventDefault();
-      deferredPrompt = e;
-      var banner = document.getElementById('installBanner');
-      if (banner && !isStandalone) banner.classList.remove('hidden');
-    });
-
-    window.addEventListener('appinstalled', function() {
-      dismissBanner();
-    });
-
-    function triggerInstall() {
-      if (deferredPrompt) {
-        deferredPrompt.prompt();
-        deferredPrompt.userChoice.then(function(choice) {
-          if (choice.outcome === 'accepted') {
-            dismissBanner();
-          }
-          deferredPrompt = null;
-        });
-      } else {
-        alert("Pour installer cette application sur votre smartphone :\\n\\n1. Touchez les 3 points (⋮) en haut de votre navigateur\\n2. Choisissez « Installer l'application » ou « Ajouter à l'écran d'accueil »");
-      }
-    }
-  </script>
-</body>
-</html>`;
-  }
-
-  // App Launcher endpoint with dedicated app ID
+  // App Launcher endpoint - immediately redirects to target website URL (no iframe)
   app.get(['/app/:id', '/app/:id/'], (req: Request, res: Response) => {
     const appId = req.params.id || (req.query.id as string) || 'app_default';
     const record = resolveShortcut(appId, req.query);
-    const autoLaunchParam = (req.query.autolaunch as string) === '1';
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    return res.send(renderLauncherHtml(appId, record, autoLaunchParam));
+    return res.redirect(record.url);
   });
 
-  // Backward compatible /launch endpoint
+  // Backward compatible /launch endpoint - immediately redirects to target website URL
   app.get('/launch', (req: Request, res: Response) => {
-    const appId = (req.query.id as string) || ('app_' + Buffer.from(String(req.query.url || 'app')).toString('base64').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10));
+    const appId = (req.query.id as string) || 'app_default';
     const record = resolveShortcut(appId, req.query);
-    const autoLaunchParam = (req.query.autolaunch as string) === '1';
-
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    return res.send(renderLauncherHtml(appId, record, autoLaunchParam));
+    return res.redirect(record.url);
   });
 
   // Setup Vite in development or static serve in production

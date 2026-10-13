@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { CustomShortcutConfig, WebsiteAnalysis } from '../types';
-import { BrowserGuide } from './BrowserGuide';
-import { detectDeviceAndBrowser, DeviceAndBrowserInfo } from '../utils/browserDetector';
+import {
+  downloadFile,
+  generateHtmlShortcutContent,
+  generateWebManifestJson,
+  buildChromeIntentUrl,
+} from '../utils/urlHelper';
 import {
   QrCode,
   Share2,
@@ -11,14 +15,11 @@ import {
   Check,
   Smartphone,
   Sparkles,
-  CheckCircle2,
-  X,
-  DownloadCloud,
-  Layers,
-  ShieldCheck,
-  Cpu,
-  Eye,
+  Download,
   RotateCcw,
+  FileCode,
+  ShieldCheck,
+  Zap,
 } from 'lucide-react';
 
 interface ResultSectionProps {
@@ -27,55 +28,27 @@ interface ResultSectionProps {
   onSimulateInPhone: () => void;
   onOpenFullPage?: () => void;
   onPurgeData?: () => void;
+  deferredPrompt?: any;
+  isInstalled?: boolean;
 }
 
 export const ResultSection: React.FC<ResultSectionProps> = ({
   config,
-  onOpenFullPage,
   onPurgeData,
+  deferredPrompt,
+  isInstalled = false,
 }) => {
-  const [deviceInfo, setDeviceInfo] = useState<DeviceAndBrowserInfo>(detectDeviceAndBrowser());
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
   const [shareSuccess, setShareSuccess] = useState<boolean>(false);
-  const [installModalOpen, setInstallModalOpen] = useState<boolean>(false);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [installStatus, setInstallStatus] = useState<string | null>(null);
+  const [installStatus, setInstallStatus] = useState<'idle' | 'installing' | 'success' | 'downloaded'>('idle');
 
-  // Detect device and browser on mount
+  // Direct target website URL (never wraps in generator applet link)
+  const targetUrl = config.url || 'https://google.com';
+
+  // Generate QR Code directly for the real website
   useEffect(() => {
-    setDeviceInfo(detectDeviceAndBrowser());
-  }, []);
-
-  // Listen for beforeinstallprompt if browser supports it
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  // Unique application ID ensuring isolated Android app installation (never overwrites old icons)
-  const appId = config.id || 'app_' + Math.random().toString(36).substring(2, 9);
-
-  // Dedicated launcher URL with full Web App Manifest for mobile icon & real app installation
-  const launchParams = new URLSearchParams({
-    id: appId,
-    url: config.url,
-    name: config.title,
-    icon: config.iconUrl,
-    theme: config.themeColor || '#10b981',
-  });
-  const standaloneLaunchUrl = `${window.location.origin}/app/${appId}/?${launchParams.toString()}`;
-
-  // Generate QR Code for mobile scanning
-  useEffect(() => {
-    QRCode.toDataURL(standaloneLaunchUrl, {
+    QRCode.toDataURL(targetUrl, {
       width: 280,
       margin: 1.5,
       color: {
@@ -85,12 +58,48 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
     })
       .then((url) => setQrCodeDataUrl(url))
       .catch((err) => console.error('QR code error', err));
-  }, [config, standaloneLaunchUrl]);
+  }, [targetUrl]);
 
-  // Handle Copy Link
+  // Direct 1-Click Installation Handler (no 3-dots menu needed)
+  const handleDirectInstall = async () => {
+    setInstallStatus('installing');
+
+    // Method 1: Native Android beforeinstallprompt
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          setInstallStatus('success');
+          return;
+        }
+      } catch (err) {
+        console.warn('Direct prompt failed:', err);
+      }
+    }
+
+    // Method 2: If on Android Chrome, try direct Chrome intent or fallback download
+    const isAndroid = /android/i.test(navigator.userAgent);
+    if (isAndroid) {
+      try {
+        const intentUrl = buildChromeIntentUrl(targetUrl);
+        window.location.href = intentUrl;
+        setInstallStatus('success');
+        return;
+      } catch {
+        // fallback to download
+      }
+    }
+
+    // Method 3: Instant HTML shortcut download (1-click direct launcher with icon)
+    handleDownloadHtmlShortcut();
+    setInstallStatus('downloaded');
+  };
+
+  // Handle Copy Link: copies the direct website URL
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(standaloneLaunchUrl);
+      await navigator.clipboard.writeText(targetUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
@@ -98,14 +107,14 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
     }
   };
 
-  // Handle Mobile Web Share
+  // Handle Mobile Share: shares direct website URL
   const handleShare = async () => {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: `Installer l'application ${config.title}`,
-          text: `Installer l'application « ${config.title} » sur mon smartphone`,
-          url: standaloneLaunchUrl,
+          title: config.title,
+          text: `Raccourci pour ${config.title}`,
+          url: targetUrl,
         });
         setShareSuccess(true);
         setTimeout(() => setShareSuccess(false), 2000);
@@ -119,25 +128,33 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
     }
   };
 
-  // Handle Direct App Installation
-  const handleInstallAppToMobile = async () => {
-    if (deferredPrompt) {
-      try {
-        deferredPrompt.prompt();
-        const choiceResult = await deferredPrompt.userChoice;
-        if (choiceResult.outcome === 'accepted') {
-          setInstallStatus(`Application « ${config.title} » installée sur votre smartphone !`);
-        }
-        setDeferredPrompt(null);
-        return;
-      } catch {
-        // fallback
-      }
-    }
+  // Open the real website directly in a new window/tab
+  const handleOpenSite = () => {
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  };
 
-    // Open dedicated installable launcher page which registers SW and triggers native install
-    window.open(standaloneLaunchUrl, '_blank', 'noopener,noreferrer');
-    setInstallModalOpen(true);
+  // Download custom HTML shortcut file (opens site directly with custom icon)
+  const handleDownloadHtmlShortcut = () => {
+    const filename = `${config.title.toLowerCase().replace(/[^a-z0-9]/gi, '_') || 'raccourci'}.html`;
+    const content = generateHtmlShortcutContent(config);
+    downloadFile(filename, content, 'text/html');
+  };
+
+  // Download Manifest
+  const handleDownloadManifest = () => {
+    const content = generateWebManifestJson(config);
+    downloadFile('manifest.json', content, 'application/json');
+  };
+
+  // Download Icon
+  const handleDownloadIcon = () => {
+    const a = document.createElement('a');
+    a.href = config.iconUrl;
+    a.download = `${config.title || 'icone'}-icon.png`;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   return (
@@ -177,52 +194,55 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
             <div className="flex items-center justify-center sm:justify-start gap-1.5 flex-wrap">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold border border-emerald-300">
                 <Check className="w-3 h-3 stroke-[3]" />
-                <span>Prêt à installer</span>
+                <span>Prêt pour Android</span>
               </span>
-              <span className="text-[11px] font-semibold text-teal-800 bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200">
-                Plein écran
+              <span className="text-[11px] font-semibold text-slate-700 bg-white/80 px-2 py-0.5 rounded-full border border-slate-200 truncate max-w-[260px]">
+                {targetUrl.replace(/^https?:\/\//i, '').replace(/\/$/, '')}
               </span>
             </div>
             <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
               {config.title}
             </h3>
             <p className="text-xs text-slate-600 max-w-xl">
-              Installez l'icône directement sur l'écran d'accueil de votre smartphone Android.
+              Installation directe en 1 clic sur l'écran d'accueil Android, sans passer par les menus.
             </p>
           </div>
 
-          {/* Big App Installation CTA */}
+          {/* Action CTAs */}
           <div className="w-full sm:w-auto flex flex-col gap-2 shrink-0">
+            {/* Big Direct 1-Click Install Button */}
             <button
-              onClick={handleInstallAppToMobile}
-              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm sm:text-base transition-all shadow-lg shadow-emerald-600/25 active:scale-[0.98] flex items-center justify-center gap-2.5 min-h-[48px]"
+              onClick={handleDirectInstall}
+              className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm sm:text-base transition-all shadow-xl shadow-emerald-600/30 active:scale-[0.98] flex items-center justify-center gap-2.5 min-h-[52px] ring-2 ring-emerald-400/50"
             >
-              <DownloadCloud className="w-5 h-5 text-emerald-100" />
-              <span>Installer sur mobile</span>
-            </button>
-
-            <button
-              onClick={onOpenFullPage || (() => window.open(standaloneLaunchUrl, '_blank'))}
-              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 font-bold text-xs border border-emerald-300 transition-colors shadow-2xs flex items-center justify-center gap-2 min-h-[40px]"
-            >
-              <Eye className="w-4 h-4 text-emerald-600" />
-              <span>Aperçu plein écran</span>
+              <Zap className="w-5 h-5 text-amber-300 fill-amber-300" />
+              <span>Installer directement</span>
             </button>
 
             <div className="flex items-center gap-2">
               <button
-                onClick={handleShare}
+                onClick={handleOpenSite}
                 className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
+                title="Ouvrir le site web"
               >
-                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{shareSuccess ? 'Partagé !' : 'Partager'}</span>
+                <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Ouvrir site</span>
               </button>
               <button
                 onClick={handleCopy}
                 className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
+                title="Copier le lien direct du site"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                 <span>{copied ? 'Copié' : 'Copier lien'}</span>
+              </button>
+              <button
+                onClick={handleShare}
+                className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
+                title="Partager l'adresse web"
+              >
+                <Share2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{shareSuccess ? 'Partagé !' : 'Partager'}</span>
               </button>
             </div>
 
@@ -230,7 +250,7 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
               <button
                 onClick={onPurgeData}
                 className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-700 hover:text-rose-800 font-semibold text-xs border border-slate-200 hover:border-rose-200 transition-all shadow-2xs flex items-center justify-center gap-2 min-h-[36px]"
-                title="Créer un nouveau raccourci"
+                title="Créer un nouveau raccourci indépendant"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-slate-500 hover:text-rose-600" />
                 <span>Nouveau raccourci</span>
@@ -239,26 +259,118 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
           </div>
         </div>
 
-        {/* Multi-app isolation note */}
-        <div className="mt-3.5 p-2.5 rounded-xl bg-white/80 border border-emerald-200 flex items-center gap-2 text-xs text-slate-600 shadow-2xs">
-          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>
-            Icône autonome avec identifiant unique (n'écrase pas vos icônes existantes).
-          </span>
-        </div>
-
-        {/* Success notification if installed */}
-        {installStatus && (
-          <div className="mt-3 p-3 rounded-xl bg-emerald-100 text-emerald-900 text-xs font-semibold flex items-center gap-2 border border-emerald-300">
-            <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-            <span>{installStatus}</span>
+        {/* Status notification */}
+        {installStatus === 'success' || isInstalled ? (
+          <div className="mt-3.5 p-3 rounded-xl bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-2 text-xs font-semibold shadow-xs">
+            <Check className="w-4 h-4 text-emerald-700 shrink-0 stroke-[3]" />
+            <span>Raccourci installé avec succès sur votre écran d'accueil Android !</span>
+          </div>
+        ) : installStatus === 'downloaded' ? (
+          <div className="mt-3.5 p-3 rounded-xl bg-teal-100 text-teal-900 border border-teal-300 flex items-center gap-2 text-xs font-semibold shadow-xs">
+            <Download className="w-4 h-4 text-teal-700 shrink-0 stroke-[3]" />
+            <span>Fichier raccourci téléchargé : ouvrez-le pour lancer directement votre site !</span>
+          </div>
+        ) : (
+          <div className="mt-3.5 p-2.5 rounded-xl bg-white/80 border border-emerald-200 flex items-center gap-2 text-xs text-slate-600 shadow-2xs">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              Chaque raccourci est indépendant : l'ajout d'une nouvelle icône n'écrase jamais vos icônes existantes.
+            </span>
           </div>
         )}
       </div>
 
-      {/* Two columns: Instant Transfer to Phone via QR Code + Direct Browser Instructions */}
+      {/* Two columns: Direct 1-Click Installation Card + QR Code Instant Scan */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-stretch">
-        {/* Transfer to Mobile Smartphone Card (5 cols on desktop) */}
+        {/* Direct 1-Click Installation Card (7 cols on desktop) */}
+        <div className="md:col-span-7 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Zap className="w-4 h-4 fill-emerald-600 text-emerald-600" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm sm:text-base text-slate-900">
+                    Installation directe sur Android
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Sans passer par les menus du navigateur
+                  </p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                1 Clic Direct
+              </span>
+            </div>
+
+            {/* Direct Step Cards */}
+            <div className="space-y-2.5 mt-3.5">
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/90 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                  1
+                </span>
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900">
+                    Touchez le bouton « Installer directement »
+                  </h5>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Déclenche instantanément la boîte de dialogue d'ajout d'icône Android.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/90 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                  2
+                </span>
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-slate-900">
+                    Validez « Ajouter » ou « Installer »
+                  </h5>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Confirmez l'ajout dans la fenêtre pop-up système Android.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-start gap-3">
+                <span className="w-6 h-6 rounded-lg bg-emerald-700 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                  ✓
+                </span>
+                <div>
+                  <h5 className="font-bold text-xs sm:text-sm text-emerald-950">
+                    Votre icône apparaît immédiatement sur l'écran d'accueil
+                  </h5>
+                  <p className="text-xs text-emerald-700 mt-0.5">
+                    Elle ouvre directement votre site web <span className="font-semibold underline">{targetUrl}</span>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="pt-2 flex flex-col sm:flex-row items-center gap-2.5">
+            <button
+              onClick={handleDirectInstall}
+              className="w-full sm:flex-1 py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors shadow-md shadow-emerald-600/20"
+            >
+              <Zap className="w-4 h-4 fill-white" />
+              <span>Installer maintenant</span>
+            </button>
+            <button
+              onClick={handleDownloadHtmlShortcut}
+              className="w-full sm:w-auto py-3.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors border border-slate-200 flex items-center justify-center gap-1.5"
+              title="Télécharger le raccourci autonome .html"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Raccourci .html</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Transfer to Mobile Smartphone Card via QR Code (5 cols on desktop) */}
         <div className="md:col-span-5 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -269,19 +381,19 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
                 </h4>
               </div>
               <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                Instantané
+                Lien direct
               </span>
             </div>
 
             <p className="text-xs text-slate-500 mt-2.5 mb-3">
-              Scannez avec l'appareil photo de votre smartphone Android :
+              Scannez pour ouvrir directement sur votre smartphone :
             </p>
 
             <div className="flex justify-center p-2.5 bg-white rounded-2xl shadow-xs max-w-[200px] mx-auto border border-slate-200">
               {qrCodeDataUrl ? (
                 <img
                   src={qrCodeDataUrl}
-                  alt="QR Code"
+                  alt="QR Code du site"
                   className="w-full h-auto aspect-square rounded-lg object-contain"
                 />
               ) : (
@@ -292,171 +404,47 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
             </div>
           </div>
 
-          <div className="mt-3 pt-2.5 border-t border-slate-100">
-            <p className="text-[11px] text-center text-slate-500">
-              Ouvre directement la boîte d'installation sur votre mobile
-            </p>
-          </div>
-        </div>
-
-        {/* How it installs as a real app on mobile (7 cols on desktop) */}
-        <div className="md:col-span-7 bg-white border border-slate-200/90 rounded-2xl p-5 shadow-sm flex flex-col justify-between space-y-4">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-emerald-600" />
-                <h4 className="font-bold text-sm sm:text-base text-slate-900">
-                  Installation sur Android
-                </h4>
-              </div>
-              <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
-                {deviceInfo.browserName}
-              </span>
-            </div>
-
-            {/* Visual step cards */}
-            <div className="space-y-2 mt-3">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                  1
-                </span>
-                <div>
-                  <h5 className="font-bold text-xs sm:text-sm text-slate-900">
-                    Ouvrez le lien sur votre smartphone
-                  </h5>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Scannez le QR Code ou appuyez sur « Installer sur mobile ».
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                  2
-                </span>
-                <div>
-                  <h5 className="font-bold text-xs sm:text-sm text-slate-900">
-                    Touchez « Installer l'application »
-                  </h5>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Dans le navigateur, confirmez l'invite d'installation (ou via le menu {deviceInfo.menuIcon} &gt; « {deviceInfo.menuActionText} »).
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                  ✓
-                </span>
-                <div>
-                  <h5 className="font-bold text-xs sm:text-sm text-emerald-950">
-                    Icône installée sur votre écran d'accueil
-                  </h5>
-                  <p className="text-xs text-emerald-900 mt-0.5">
-                    S'ouvre en plein écran sans barre d'adresse.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-1">
-            <a
-              href={standaloneLaunchUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-colors shadow-xs"
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-500 truncate" title={targetUrl}>
+              {targetUrl}
+            </span>
+            <button
+              onClick={handleCopy}
+              className="text-xs font-semibold text-emerald-700 hover:text-emerald-900 shrink-0"
             >
-              <ExternalLink className="w-4 h-4" />
-              <span>Ouvrir l'application maintenant</span>
-            </a>
+              {copied ? 'Copié !' : 'Copier'}
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Browser specific illustrated guide tabs */}
-      <BrowserGuide
-        detectedBrowserId={deviceInfo.browserId}
-        defaultBrowser={deviceInfo.browserId}
-      />
-
-      {/* Interactive Install Modal */}
-      {installModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white border border-slate-200 rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
-            <button
-              onClick={() => setInstallModalOpen(false)}
-              className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              title="Fermer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-white border-2 border-emerald-500 p-1.5 flex items-center justify-center shrink-0 shadow-sm">
-                <img
-                  src={config.iconUrl}
-                  alt={config.title}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-              <div>
-                <h4 className="font-bold text-base text-slate-900">
-                  Installer l'application « {config.title} »
-                </h4>
-                <p className="text-xs text-slate-500">
-                  Installation sur votre smartphone Android
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3 text-xs text-slate-700 leading-relaxed">
-              <p className="font-semibold text-slate-900">
-                👉 Pour installer comme une vraie application mobile :
-              </p>
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                  1
-                </span>
-                <span>
-                  Ouvrez la page sur votre smartphone Android.
-                </span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
-                  2
-                </span>
-                <span>
-                  Appuyez sur le bouton vert <strong>« 📲 Installer l'application sur mon smartphone »</strong> qui s'affiche sur la page, ou touchez le menu <strong>({deviceInfo.menuIcon})</strong> de votre navigateur et sélectionnez <strong className="text-emerald-800">« Installer l'application »</strong>.
-                </span>
-              </div>
-            </div>
-
-            <div className="space-y-2 pt-2">
-              <a
-                href={standaloneLaunchUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-colors"
-              >
-                <DownloadCloud className="w-4 h-4" />
-                <span>Ouvrir la page d'installation de l'application</span>
-              </a>
-
-              <button
-                type="button"
-                onClick={() => {
-                  handleCopy();
-                  setInstallModalOpen(false);
-                }}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs transition-colors border border-slate-200"
-              >
-                {copied ? '✓ Lien copié !' : 'Copier l\'adresse pour l\'envoyer'}
-              </button>
-            </div>
-          </div>
+      {/* Additional Resource Downloads */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 text-slate-700 font-semibold">
+          <Download className="w-4 h-4 text-emerald-600" />
+          <span>Fichiers exportables pour votre icône :</span>
         </div>
-      )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleDownloadIcon}
+            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition-colors border border-slate-200"
+          >
+            Télécharger l'icône HD (.png)
+          </button>
+          <button
+            onClick={handleDownloadHtmlShortcut}
+            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition-colors border border-slate-200"
+          >
+            Fichier Raccourci (.html)
+          </button>
+          <button
+            onClick={handleDownloadManifest}
+            className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-medium transition-colors border border-slate-200"
+          >
+            Web Manifest (.json)
+          </button>
+        </div>
+      </div>
     </div>
   );
 };

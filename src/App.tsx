@@ -67,6 +67,39 @@ export default function App() {
     method: 'pwa',
   });
 
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  // Sync dynamic app manifest whenever shortcut configuration changes
+  useEffect(() => {
+    if (config.url) {
+      const manifestTag = document.getElementById('app-manifest') as HTMLLinkElement;
+      if (manifestTag) {
+        manifestTag.href = `/api/manifest?url=${encodeURIComponent(config.url)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}`;
+      }
+    }
+  }, [config.url, config.title, config.iconUrl, config.themeColor]);
+
   const stepContainerRef = useRef<HTMLDivElement>(null);
 
   // Navigate to step helper
@@ -470,6 +503,8 @@ export default function App() {
                   onSimulateInPhone={() => setFullPageModalOpen(true)}
                   onOpenFullPage={() => setFullPageModalOpen(true)}
                   onPurgeData={() => handlePurgeAllData(true)}
+                  deferredPrompt={deferredPrompt}
+                  isInstalled={isInstalled}
                 />
 
                 {/* Step 3 Return actions */}
@@ -651,13 +686,13 @@ export default function App() {
 
               <div className="flex items-center gap-2">
                 <a
-                  href={`/launch?url=${encodeURIComponent(config.url)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}`}
+                  href={config.url}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="hidden xs:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-200 transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Ouvrir en plein écran</span>
+                  <span>Ouvrir le site</span>
                 </a>
 
                 <button
