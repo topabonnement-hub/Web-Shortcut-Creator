@@ -74,11 +74,9 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
       }
     }
 
-    // Method 2: Open dedicated standalone install page with central Open button
-    const appId = config.id || 'app_default';
-    const directInstallUrl = `/app/${encodeURIComponent(appId)}?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}&id=${encodeURIComponent(appId)}`;
-    window.open(directInstallUrl, '_blank');
-    setInstallStatus('idle');
+    // Method 2: Instant working install method - download standalone shortcut file that opens target website directly with custom icon
+    handleDownloadHtmlShortcut();
+    setInstallStatus('downloaded');
   };
 
   // Handle Copy Link: copies the direct website URL
