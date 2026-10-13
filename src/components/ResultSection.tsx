@@ -57,16 +57,15 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
       .catch((err) => console.error('QR code error', err));
   }, [targetUrl]);
 
-  // Direct 1-Click Installation Handler (no 3-dots menu needed)
+  // Direct 1-Click Installation Handler
   const handleDirectInstall = async () => {
-    setInstallStatus('installing');
-
     // Method 1: Native Android beforeinstallprompt if triggered on mobile browser
     if (deferredPrompt) {
       try {
+        setInstallStatus('installing');
         deferredPrompt.prompt();
         const choice = await deferredPrompt.userChoice;
-        if (choice.outcome === 'accepted') {
+        if (choice && choice.outcome === 'accepted') {
           setInstallStatus('success');
           return;
         }
@@ -75,11 +74,11 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
       }
     }
 
-    // Method 2: Open dedicated standalone install page (works seamlessly on mobile & outside iframe)
+    // Method 2: Open dedicated standalone install page with central Open button
     const appId = config.id || 'app_default';
-    const directInstallUrl = `/app/${encodeURIComponent(appId)}?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}&id=${encodeURIComponent(appId)}&install=1`;
+    const directInstallUrl = `/app/${encodeURIComponent(appId)}?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}&id=${encodeURIComponent(appId)}`;
     window.open(directInstallUrl, '_blank');
-    setInstallStatus('success');
+    setInstallStatus('idle');
   };
 
   // Handle Copy Link: copies the direct website URL
@@ -190,30 +189,31 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
               {config.title}
             </h3>
             <p className="text-xs text-slate-600 max-w-xl">
-              Installation directe en 1 clic sur l'écran d'accueil Android, sans passer par les menus.
+              Accédez directement à votre site web ou installez le raccourci sur votre écran d'accueil Android.
             </p>
           </div>
 
-          {/* Action CTAs */}
-          <div className="w-full sm:w-auto flex flex-col gap-2 shrink-0">
-            {/* Big Direct 1-Click Install Button */}
+          {/* Action CTAs: Open button in center and Install button */}
+          <div className="w-full sm:w-auto flex flex-col gap-2.5 shrink-0">
+            {/* Prominent Center Open Button */}
+            <button
+              onClick={handleOpenSite}
+              className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm sm:text-base transition-all shadow-xl shadow-emerald-600/30 active:scale-[0.98] flex items-center justify-center gap-2.5 ring-2 ring-emerald-400/50"
+            >
+              <ExternalLink className="w-5 h-5 text-emerald-200" />
+              <span>Ouvrir le site web</span>
+            </button>
+
+            {/* Direct 1-Click Install Button */}
             <button
               onClick={handleDirectInstall}
-              className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm sm:text-base transition-all shadow-xl shadow-emerald-600/30 active:scale-[0.98] flex items-center justify-center gap-2.5 min-h-[52px] ring-2 ring-emerald-400/50"
+              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs sm:text-sm transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-2 border border-slate-700"
             >
-              <Zap className="w-5 h-5 text-amber-300 fill-amber-300" />
-              <span>Installer directement</span>
+              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+              <span>📲 Installer sur l'écran d'accueil</span>
             </button>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={handleOpenSite}
-                className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
-                title="Ouvrir le site web"
-              >
-                <ExternalLink className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Ouvrir site</span>
-              </button>
               <button
                 onClick={handleCopy}
                 className="flex-1 py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
@@ -230,15 +230,23 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
                 <Share2 className="w-3.5 h-3.5 text-emerald-600" />
                 <span>{shareSuccess ? 'Partagé !' : 'Partager'}</span>
               </button>
+              <button
+                onClick={handleDownloadHtmlShortcut}
+                className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-800 font-semibold text-xs border border-slate-300 transition-colors shadow-2xs flex items-center justify-center gap-1.5 min-h-[38px]"
+                title="Télécharger raccourci .html"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-600" />
+                <span>.HTML</span>
+              </button>
             </div>
 
             {onPurgeData && (
               <button
                 onClick={onPurgeData}
-                className="w-full py-2 px-3 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-700 hover:text-rose-800 font-semibold text-xs border border-slate-200 hover:border-rose-200 transition-all shadow-2xs flex items-center justify-center gap-2 min-h-[36px]"
+                className="w-full py-1.5 px-3 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-medium text-[11px] border border-slate-200 hover:border-rose-200 transition-all shadow-2xs flex items-center justify-center gap-1.5"
                 title="Créer un nouveau raccourci indépendant"
               >
-                <RotateCcw className="w-3.5 h-3.5 text-slate-500 hover:text-rose-600" />
+                <RotateCcw className="w-3 h-3 text-slate-400 hover:text-rose-600" />
                 <span>Nouveau raccourci</span>
               </button>
             )}

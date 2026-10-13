@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import zlib from 'zlib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -315,7 +316,137 @@ async function startServer() {
     return res.json({ success: true, message: 'Toutes les données en cache ont été purgées avec succès.' });
   });
 
-  // Icon proxy endpoint to ensure HTTP icons can load securely over HTTPS for manifest & Android installation
+  // CRC32 helper for raw PNG generation
+  function crc32(buf: Buffer): number {
+    let c = 0xffffffff;
+    for (let i = 0; i < buf.length; i++) {
+      c ^= buf[i];
+      for (let k = 0; k < 8; k++) {
+        c = (c >>> 1) ^ (c & 1 ? 0xedb88320 : 0);
+      }
+    }
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  function makePngChunk(type: string, data: Buffer): Buffer {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length, 0);
+    const typeBuf = Buffer.from(type, 'ascii');
+    const toCrc = Buffer.concat([typeBuf, data]);
+    const crc = crc32(toCrc);
+    const crcBuf = Buffer.alloc(4);
+    crcBuf.writeUInt32BE(crc >>> 0, 0);
+    return Buffer.concat([len, typeBuf, data, crcBuf]);
+  }
+
+  // Generates guaranteed valid PNG icon for Chrome PWA installability requirements
+  function generateSolidPng(size: number, hexColor: string): Buffer {
+    let r = 16, g = 185, b = 129;
+    if (hexColor && hexColor.startsWith('#') && hexColor.length >= 7) {
+      r = parseInt(hexColor.slice(1, 3), 16) || 16;
+      g = parseInt(hexColor.slice(3, 5), 16) || 185;
+      b = parseInt(hexColor.slice(5, 7), 16) || 129;
+    }
+
+    const rowSize = size * 4 + 1;
+    const rawData = Buffer.alloc(rowSize * size);
+
+    for (let y = 0; y < size; y++) {
+      const rowOffset = y * rowSize;
+      rawData[rowOffset] = 0;
+      for (let x = 0; x < size; x++) {
+        const pxOffset = rowOffset + 1 + x * 4;
+        const cx = size / 2;
+        const cy = size / 2;
+        const dx = Math.abs(x - cx);
+        const dy = Math.abs(y - cy);
+        const radius = size * 0.44;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= radius) {
+          rawData[pxOffset] = r;
+          rawData[pxOffset + 1] = g;
+          rawData[pxOffset + 2] = b;
+          rawData[pxOffset + 3] = 255;
+        } else {
+          rawData[pxOffset] = 0;
+          rawData[pxOffset + 1] = 0;
+          rawData[pxOffset + 2] = 0;
+          rawData[pxOffset + 3] = 0;
+        }
+      }
+    }
+
+    const deflated = zlib.deflateSync(rawData);
+    const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const ihdrData = Buffer.alloc(13);
+    ihdrData.writeUInt32BE(size, 0);
+    ihdrData.writeUInt32BE(size, 4);
+    ihdrData[8] = 8;
+    ihdrData[9] = 6;
+    ihdrData[10] = 0;
+    ihdrData[11] = 0;
+    ihdrData[12] = 0;
+
+    return Buffer.concat([
+      sig,
+      makePngChunk('IHDR', ihdrData),
+      makePngChunk('IDAT', deflated),
+      makePngChunk('IEND', Buffer.alloc(0)),
+    ]);
+  }
+
+  // App icon endpoint: guarantees a valid PNG file for Chrome PWA manifests
+  app.get('/api/app-icon', async (req: Request, res: Response) => {
+    const iconUrl = req.query.url as string;
+    const themeColor = (req.query.theme as string) || '#10b981';
+    const size = parseInt((req.query.size as string) || '192', 10) || 192;
+
+    if (iconUrl && iconUrl !== '/favicon.ico') {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const resp = await fetch(iconUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36',
+            'Accept': 'image/*,*/*;q=0.8',
+          },
+        });
+        clearTimeout(timeoutId);
+
+        if (resp.ok) {
+          const buffer = Buffer.from(await resp.arrayBuffer());
+          const pngSig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+          const pngIndex = buffer.indexOf(pngSig);
+
+          // Extract embedded PNG from ICO file or serve raw PNG
+          if (pngIndex !== -1) {
+            const cleanPng = buffer.subarray(pngIndex);
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.send(cleanPng);
+          }
+
+          const ct = resp.headers.get('content-type') || '';
+          if (ct.includes('image/webp') || ct.includes('image/jpeg')) {
+            res.setHeader('Content-Type', ct);
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.send(buffer);
+          }
+        }
+      } catch (err) {
+        console.warn('App icon fetch failed, using generated PNG fallback:', err);
+      }
+    }
+
+    const fallbackPng = generateSolidPng(size >= 512 ? 512 : 192, themeColor);
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(fallbackPng);
+  });
+
+  // Icon proxy endpoint for general image loading
   app.get('/api/icon-proxy', async (req: Request, res: Response) => {
     const iconUrl = req.query.url as string;
     if (!iconUrl) return res.status(400).send('URL manquante');
@@ -336,11 +467,20 @@ async function startServer() {
         return res.redirect(iconUrl);
       }
 
+      const buffer = Buffer.from(await resp.arrayBuffer());
+      const pngSig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      const pngIndex = buffer.indexOf(pngSig);
+
+      if (pngIndex !== -1) {
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.send(buffer.subarray(pngIndex));
+      }
+
       const contentType = resp.headers.get('content-type') || 'image/png';
-      const buffer = await resp.arrayBuffer();
       res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.send(Buffer.from(buffer));
+      return res.send(buffer);
     } catch {
       return res.redirect(iconUrl);
     }
@@ -357,32 +497,33 @@ async function startServer() {
     const safeIcon = encodeURIComponent(record.icon);
     const safeTheme = encodeURIComponent(record.themeColor);
 
-    // Secure icon url: use proxy if HTTP to prevent mixed content blocking on Android
-    const iconEndpoint = record.icon.startsWith('http://')
-      ? `/api/icon-proxy?url=${safeIcon}`
-      : record.icon;
+    // Guaranteed PNG endpoints for Chrome PWA installability requirements
+    const icon192 = `/api/app-icon?url=${safeIcon}&theme=${safeTheme}&size=192&id=${safeAppId}`;
+    const icon512 = `/api/app-icon?url=${safeIcon}&theme=${safeTheme}&size=512&id=${safeAppId}`;
 
-    // Same-origin start_url with launch=1 so launching from Android home screen redirects instantly
+    // Same-origin start_url with launch=1 so launching from Android home screen redirects instantly to target website
     const startUrl = `/app/${safeAppId}?url=${safeUrl}&name=${safeName}&icon=${safeIcon}&theme=${safeTheme}&id=${safeAppId}&launch=1`;
 
     const manifest = {
       name: record.name,
       short_name: record.shortName,
       start_url: startUrl,
+      id: `/app/${safeAppId}`,
       scope: `/`,
       display: 'standalone',
+      orientation: 'any',
       background_color: record.bgColor,
       theme_color: record.themeColor,
       description: `Raccourci Android pour ${record.name}`,
       icons: [
         {
-          src: iconEndpoint,
+          src: icon192,
           sizes: '192x192',
           type: 'image/png',
           purpose: 'any maskable',
         },
         {
-          src: iconEndpoint,
+          src: icon512,
           sizes: '512x512',
           type: 'image/png',
           purpose: 'any maskable',
@@ -397,16 +538,19 @@ async function startServer() {
     return res.json(manifest);
   });
 
-  // Dedicated Service Worker scoped to the specific app ID
+  // Dedicated Service Worker with Service-Worker-Allowed header
   app.get(['/app/:id/sw.js', '/sw.js'], (_req: Request, res: Response) => {
     res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Service-Worker-Allowed', '/');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
     return res.send(`
       self.addEventListener('install', (e) => self.skipWaiting());
       self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-      self.addEventListener('fetch', (e) => {});
+      self.addEventListener('fetch', (e) => {
+        // Transparent fetch pass-through
+      });
     `);
   });
 
@@ -418,6 +562,7 @@ async function startServer() {
     const safeIcon = String(record.icon).replace(/"/g, '&quot;');
     const safeTheme = String(record.themeColor).replace(/"/g, '&quot;');
     const manifestHref = `/app/${safeId}/manifest.json?url=${encodeURIComponent(record.url)}&name=${encodeURIComponent(record.name)}&icon=${encodeURIComponent(record.icon)}&theme=${encodeURIComponent(record.themeColor)}&id=${safeId}`;
+    const pngIcon = `/api/app-icon?url=${encodeURIComponent(record.icon)}&theme=${encodeURIComponent(record.themeColor)}&size=192&id=${safeId}`;
 
     return `<!DOCTYPE html>
 <html lang="fr">
@@ -431,40 +576,74 @@ async function startServer() {
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="${safeName}">
   <link rel="manifest" href="${manifestHref}">
-  <link rel="icon" href="${safeIcon}">
-  <link rel="apple-touch-icon" href="${safeIcon}">
+  <link rel="icon" type="image/png" href="${pngIcon}">
+  <link rel="apple-touch-icon" href="${pngIcon}">
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-950 text-white min-h-screen flex flex-col items-center justify-center p-4 selection:bg-emerald-500 font-sans">
   <div class="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-2xl relative overflow-hidden">
+    <!-- Ambient decorative glows -->
     <div class="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
     <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-    <div class="relative w-24 h-24 mx-auto mb-4 bg-white/10 p-2 rounded-2xl border border-white/20 shadow-xl flex items-center justify-center overflow-hidden">
-      <img src="${safeIcon}" alt="${safeName}" class="w-full h-full object-contain" onerror="this.src='/favicon.ico'">
+    <!-- App Icon -->
+    <div class="relative w-24 h-24 mx-auto mb-4 bg-white/10 p-2.5 rounded-3xl border border-white/20 shadow-2xl flex items-center justify-center overflow-hidden">
+      <img src="${pngIcon}" alt="${safeName}" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${safeIcon}'">
     </div>
 
+    <!-- App Title & Site Address -->
     <h1 class="text-2xl font-extrabold text-white mb-1 tracking-tight">${safeName}</h1>
-    <p class="text-xs text-slate-400 mb-6 truncate max-w-xs mx-auto">${safeUrl}</p>
+    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700/80 mb-6 max-w-xs mx-auto">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+      <p class="text-xs text-slate-300 font-mono truncate">${safeUrl}</p>
+    </div>
 
     <!-- Success banner if installed -->
-    <div id="installed-banner" class="hidden mb-6 p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold">
+    <div id="installed-banner" class="hidden mb-6 p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold text-center">
       ✅ Raccourci ajouté avec succès sur votre écran d'accueil Android !
     </div>
 
-    <!-- Direct Install Button -->
-    <div class="space-y-3">
-      <button id="direct-install-btn" class="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-extrabold text-base shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2">
-        <span>📲 Installer sur l'écran d'accueil</span>
+    <!-- Actions Area: Open in Center & Install Direct -->
+    <div class="space-y-3.5">
+      <!-- 1. Central prominent Open Button (Opens target site directly) -->
+      <a id="open-site-btn" href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-extrabold text-base sm:text-lg shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2.5 border border-emerald-400/30">
+        <svg class="w-5 h-5 text-emerald-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+        </svg>
+        <span>Ouvrir le site web</span>
+      </a>
+
+      <!-- 2. Direct Install Button -->
+      <button id="direct-install-btn" class="w-full py-3.5 px-6 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-[0.98] text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2.5 border border-slate-700">
+        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v12m0 0l-4-4m4 4l4-4m-8 8h16"></path>
+        </svg>
+        <span id="install-btn-text">📲 Installer sur l'écran d'accueil</span>
       </button>
 
-      <a href="${safeUrl}" class="block w-full py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-colors border border-slate-700">
-        🌐 Ouvrir directement le site web
-      </a>
+      <!-- 3. Offline Shortcut File Download (.html) -->
+      <button id="download-shortcut-btn" class="w-full py-2.5 px-4 rounded-xl bg-slate-800/40 hover:bg-slate-800 text-slate-400 hover:text-slate-200 font-semibold text-xs transition-colors flex items-center justify-center gap-2 border border-slate-800">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+        </svg>
+        <span>Télécharger raccourci (.html)</span>
+      </button>
     </div>
 
-    <p id="install-hint" class="text-[11px] text-slate-500 mt-5">
-      Touchez « Installer » pour ajouter l'icône directement à votre smartphone Android.
+    <!-- Manual install guidance (shown when prompt is pending or fallback needed) -->
+    <div id="install-guide" class="hidden mt-5 p-4 rounded-2xl bg-slate-800/80 border border-slate-700 text-left text-xs text-slate-300 space-y-2">
+      <div class="font-bold text-white flex items-center gap-1.5">
+        <span>💡 Comment installer sur Android :</span>
+      </div>
+      <ol class="list-decimal list-inside space-y-1 text-slate-300 text-[11px] leading-relaxed">
+        <li>Touchez le menu <strong class="text-white">⋮ (3 points)</strong> en haut à droite de Chrome</li>
+        <li>Touchez <strong class="text-emerald-400">« Ajouter à l'écran d'accueil »</strong> ou <strong class="text-emerald-400">« Installer l'application »</strong></li>
+        <li>Le raccourci avec le logo apparaîtra directement sur votre écran d'accueil</li>
+      </ol>
+    </div>
+
+    <p class="text-[11px] text-slate-500 mt-5">
+      Touchez « Ouvrir le site web » pour accéder au lien, ou « Installer » pour créer l'icône sur votre téléphone.
     </p>
   </div>
 
@@ -475,21 +654,30 @@ async function startServer() {
       window.location.replace("${safeUrl}");
     }
 
-    // Register Service Worker for PWA compliance
+    // Register Service Worker for PWA compliance with root scope
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(function(e) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(e) {
         console.warn('SW reg notice:', e);
       });
     }
 
     let deferredPrompt = null;
     const installBtn = document.getElementById('direct-install-btn');
+    const installBtnText = document.getElementById('install-btn-text');
     const installedBanner = document.getElementById('installed-banner');
+    const installGuide = document.getElementById('install-guide');
+    const downloadShortcutBtn = document.getElementById('download-shortcut-btn');
     const autoInstall = ${shouldAutoInstall ? 'true' : 'false'};
 
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
+      if (installBtnText) {
+        installBtnText.innerText = "📲 Installer sur l'écran d'accueil (Prêt !)";
+      }
+      if (installBtn) {
+        installBtn.classList.add('ring-2', 'ring-emerald-400', 'bg-emerald-700/80');
+      }
       if (autoInstall) {
         triggerInstall();
       }
@@ -497,28 +685,55 @@ async function startServer() {
 
     window.addEventListener('appinstalled', () => {
       if (installedBanner) installedBanner.classList.remove('hidden');
+      if (installGuide) installGuide.classList.add('hidden');
       if (installBtn) {
         installBtn.innerHTML = '<span>✓ Déjà installé</span>';
         installBtn.classList.add('bg-slate-800', 'text-slate-400');
-        installBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+        installBtn.classList.remove('ring-2', 'ring-emerald-400', 'bg-emerald-700/80');
         installBtn.disabled = true;
       }
     });
 
     async function triggerInstall() {
       if (deferredPrompt) {
-        deferredPrompt.prompt();
-        const choice = await deferredPrompt.userChoice;
-        if (choice.outcome === 'accepted') {
-          if (installedBanner) installedBanner.classList.remove('hidden');
+        try {
+          deferredPrompt.prompt();
+          const choice = await deferredPrompt.userChoice;
+          if (choice && choice.outcome === 'accepted') {
+            if (installedBanner) installedBanner.classList.remove('hidden');
+            if (installGuide) installGuide.classList.add('hidden');
+          }
+        } catch (err) {
+          console.warn('Prompt error:', err);
+          if (installGuide) installGuide.classList.remove('hidden');
         }
       } else {
-        // Fallback for browsers or if already ready
-        window.location.href = "${safeUrl}";
+        // Show manual guidance instead of opening the link!
+        if (installGuide) {
+          installGuide.classList.remove('hidden');
+        }
       }
     }
 
-    installBtn.addEventListener('click', triggerInstall);
+    if (installBtn) {
+      installBtn.addEventListener('click', triggerInstall);
+    }
+
+    // Direct HTML shortcut download fallback
+    if (downloadShortcutBtn) {
+      downloadShortcutBtn.addEventListener('click', () => {
+        const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeName}</title><link rel="icon" href="${safeIcon}"><script>window.location.replace("${safeUrl}");<\\/script></head><body><p>Redirection vers ${safeName}...</p></body></html>';
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '${safeName.toLowerCase().replace(/[^a-z0-9]/gi, '_') || 'raccourci'}.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
   </script>
 </body>
 </html>`;
@@ -534,7 +749,7 @@ async function startServer() {
       return res.redirect(record.url);
     }
 
-    // Otherwise render direct installation page
+    // Otherwise render direct installation page with central Open button
     const shouldAuto = req.query.install === '1';
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(renderDirectInstallPage(appId, record, shouldAuto));
