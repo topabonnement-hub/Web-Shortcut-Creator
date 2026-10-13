@@ -95,10 +95,10 @@ export default function App() {
     if (config.url) {
       const manifestTag = document.getElementById('app-manifest') as HTMLLinkElement;
       if (manifestTag) {
-        manifestTag.href = `/api/manifest?url=${encodeURIComponent(config.url)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}`;
+        manifestTag.href = `/api/manifest?url=${encodeURIComponent(config.url)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}&id=${encodeURIComponent(config.id || 'app_default')}`;
       }
     }
-  }, [config.url, config.title, config.iconUrl, config.themeColor]);
+  }, [config.url, config.title, config.iconUrl, config.themeColor, config.id]);
 
   const stepContainerRef = useRef<HTMLDivElement>(null);
 

@@ -315,28 +315,74 @@ async function startServer() {
     return res.json({ success: true, message: 'Toutes les données en cache ont été purgées avec succès.' });
   });
 
+  // Icon proxy endpoint to ensure HTTP icons can load securely over HTTPS for manifest & Android installation
+  app.get('/api/icon-proxy', async (req: Request, res: Response) => {
+    const iconUrl = req.query.url as string;
+    if (!iconUrl) return res.status(400).send('URL manquante');
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const resp = await fetch(iconUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36',
+          'Accept': 'image/*,*/*;q=0.8',
+        },
+      });
+      clearTimeout(timeoutId);
+
+      if (!resp.ok) {
+        return res.redirect(iconUrl);
+      }
+
+      const contentType = resp.headers.get('content-type') || 'image/png';
+      const buffer = await resp.arrayBuffer();
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(Buffer.from(buffer));
+    } catch {
+      return res.redirect(iconUrl);
+    }
+  });
+
   // Dedicated Manifest for isolated PWA app installation
   app.get(['/app/:id/manifest.json', '/api/manifest'], (req: Request, res: Response) => {
     const appId = (req.params.id as string) || (req.query.id as string) || 'app_default';
     const record = resolveShortcut(appId, req.query);
 
+    const safeAppId = encodeURIComponent(appId);
+    const safeUrl = encodeURIComponent(record.url);
+    const safeName = encodeURIComponent(record.name);
+    const safeIcon = encodeURIComponent(record.icon);
+    const safeTheme = encodeURIComponent(record.themeColor);
+
+    // Secure icon url: use proxy if HTTP to prevent mixed content blocking on Android
+    const iconEndpoint = record.icon.startsWith('http://')
+      ? `/api/icon-proxy?url=${safeIcon}`
+      : record.icon;
+
+    // Same-origin start_url with launch=1 so launching from Android home screen redirects instantly
+    const startUrl = `/app/${safeAppId}?url=${safeUrl}&name=${safeName}&icon=${safeIcon}&theme=${safeTheme}&id=${safeAppId}&launch=1`;
+
     const manifest = {
       name: record.name,
       short_name: record.shortName,
-      start_url: record.url,
+      start_url: startUrl,
+      scope: `/`,
       display: 'standalone',
       background_color: record.bgColor,
       theme_color: record.themeColor,
-      description: `Application pour ${record.name}`,
+      description: `Raccourci Android pour ${record.name}`,
       icons: [
         {
-          src: record.icon,
+          src: iconEndpoint,
           sizes: '192x192',
           type: 'image/png',
           purpose: 'any maskable',
         },
         {
-          src: record.icon,
+          src: iconEndpoint,
           sizes: '512x512',
           type: 'image/png',
           purpose: 'any maskable',
@@ -364,11 +410,134 @@ async function startServer() {
     `);
   });
 
-  // App Launcher endpoint - immediately redirects to target website URL (no iframe)
+  // Dedicated direct install & launcher HTML generator
+  function renderDirectInstallPage(appId: string, record: ShortcutRecord, shouldAutoInstall: boolean): string {
+    const safeId = encodeURIComponent(appId);
+    const safeName = String(record.name).replace(/"/g, '&quot;');
+    const safeUrl = String(record.url).replace(/"/g, '&quot;');
+    const safeIcon = String(record.icon).replace(/"/g, '&quot;');
+    const safeTheme = String(record.themeColor).replace(/"/g, '&quot;');
+    const manifestHref = `/app/${safeId}/manifest.json?url=${encodeURIComponent(record.url)}&name=${encodeURIComponent(record.name)}&icon=${encodeURIComponent(record.icon)}&theme=${encodeURIComponent(record.themeColor)}&id=${safeId}`;
+
+    return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>${safeName}</title>
+  <meta name="theme-color" content="${safeTheme}">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="${safeName}">
+  <link rel="manifest" href="${manifestHref}">
+  <link rel="icon" href="${safeIcon}">
+  <link rel="apple-touch-icon" href="${safeIcon}">
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex flex-col items-center justify-center p-4 selection:bg-emerald-500 font-sans">
+  <div class="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center shadow-2xl relative overflow-hidden">
+    <div class="absolute -top-24 -left-24 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -right-24 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="relative w-24 h-24 mx-auto mb-4 bg-white/10 p-2 rounded-2xl border border-white/20 shadow-xl flex items-center justify-center overflow-hidden">
+      <img src="${safeIcon}" alt="${safeName}" class="w-full h-full object-contain" onerror="this.src='/favicon.ico'">
+    </div>
+
+    <h1 class="text-2xl font-extrabold text-white mb-1 tracking-tight">${safeName}</h1>
+    <p class="text-xs text-slate-400 mb-6 truncate max-w-xs mx-auto">${safeUrl}</p>
+
+    <!-- Success banner if installed -->
+    <div id="installed-banner" class="hidden mb-6 p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold">
+      ✅ Raccourci ajouté avec succès sur votre écran d'accueil Android !
+    </div>
+
+    <!-- Direct Install Button -->
+    <div class="space-y-3">
+      <button id="direct-install-btn" class="w-full py-4 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-extrabold text-base shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2">
+        <span>📲 Installer sur l'écran d'accueil</span>
+      </button>
+
+      <a href="${safeUrl}" class="block w-full py-3 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs transition-colors border border-slate-700">
+        🌐 Ouvrir directement le site web
+      </a>
+    </div>
+
+    <p id="install-hint" class="text-[11px] text-slate-500 mt-5">
+      Touchez « Installer » pour ajouter l'icône directement à votre smartphone Android.
+    </p>
+  </div>
+
+  <script>
+    // Immediate redirect if opened from Android Home Screen (standalone mode)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    if (isStandalone) {
+      window.location.replace("${safeUrl}");
+    }
+
+    // Register Service Worker for PWA compliance
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function(e) {
+        console.warn('SW reg notice:', e);
+      });
+    }
+
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('direct-install-btn');
+    const installedBanner = document.getElementById('installed-banner');
+    const autoInstall = ${shouldAutoInstall ? 'true' : 'false'};
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      if (autoInstall) {
+        triggerInstall();
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      if (installedBanner) installedBanner.classList.remove('hidden');
+      if (installBtn) {
+        installBtn.innerHTML = '<span>✓ Déjà installé</span>';
+        installBtn.classList.add('bg-slate-800', 'text-slate-400');
+        installBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+        installBtn.disabled = true;
+      }
+    });
+
+    async function triggerInstall() {
+      if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice.outcome === 'accepted') {
+          if (installedBanner) installedBanner.classList.remove('hidden');
+        }
+      } else {
+        // Fallback for browsers or if already ready
+        window.location.href = "${safeUrl}";
+      }
+    }
+
+    installBtn.addEventListener('click', triggerInstall);
+  </script>
+</body>
+</html>`;
+  }
+
+  // App Launcher & Direct Installation endpoint
   app.get(['/app/:id', '/app/:id/'], (req: Request, res: Response) => {
     const appId = req.params.id || (req.query.id as string) || 'app_default';
     const record = resolveShortcut(appId, req.query);
-    return res.redirect(record.url);
+
+    // If launched from home screen icon (launch=1 or autolaunch=1), immediately redirect to real website
+    if (req.query.launch === '1' || req.query.autolaunch === '1') {
+      return res.redirect(record.url);
+    }
+
+    // Otherwise render direct installation page
+    const shouldAuto = req.query.install === '1';
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(renderDirectInstallPage(appId, record, shouldAuto));
   });
 
   // Backward compatible /launch endpoint - immediately redirects to target website URL

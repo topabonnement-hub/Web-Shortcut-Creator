@@ -5,7 +5,6 @@ import {
   downloadFile,
   generateHtmlShortcutContent,
   generateWebManifestJson,
-  buildChromeIntentUrl,
 } from '../utils/urlHelper';
 import {
   QrCode,
@@ -13,11 +12,9 @@ import {
   Copy,
   ExternalLink,
   Check,
-  Smartphone,
   Sparkles,
   Download,
   RotateCcw,
-  FileCode,
   ShieldCheck,
   Zap,
 } from 'lucide-react';
@@ -64,7 +61,7 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
   const handleDirectInstall = async () => {
     setInstallStatus('installing');
 
-    // Method 1: Native Android beforeinstallprompt
+    // Method 1: Native Android beforeinstallprompt if triggered on mobile browser
     if (deferredPrompt) {
       try {
         deferredPrompt.prompt();
@@ -78,22 +75,11 @@ export const ResultSection: React.FC<ResultSectionProps> = ({
       }
     }
 
-    // Method 2: If on Android Chrome, try direct Chrome intent or fallback download
-    const isAndroid = /android/i.test(navigator.userAgent);
-    if (isAndroid) {
-      try {
-        const intentUrl = buildChromeIntentUrl(targetUrl);
-        window.location.href = intentUrl;
-        setInstallStatus('success');
-        return;
-      } catch {
-        // fallback to download
-      }
-    }
-
-    // Method 3: Instant HTML shortcut download (1-click direct launcher with icon)
-    handleDownloadHtmlShortcut();
-    setInstallStatus('downloaded');
+    // Method 2: Open dedicated standalone install page (works seamlessly on mobile & outside iframe)
+    const appId = config.id || 'app_default';
+    const directInstallUrl = `/app/${encodeURIComponent(appId)}?url=${encodeURIComponent(targetUrl)}&name=${encodeURIComponent(config.title)}&icon=${encodeURIComponent(config.iconUrl)}&theme=${encodeURIComponent(config.themeColor || '#10b981')}&id=${encodeURIComponent(appId)}&install=1`;
+    window.open(directInstallUrl, '_blank');
+    setInstallStatus('success');
   };
 
   // Handle Copy Link: copies the direct website URL
